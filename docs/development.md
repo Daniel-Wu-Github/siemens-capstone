@@ -2,7 +2,9 @@
 
 ## Current state
 
-The repository contains documentation and planning conventions. Python is the proposed language for the offline prototype; the UI, persistence, alert channel, and cloud services are not yet implemented.
+The repository contains a working local prototype authorized by the user. Python 3.11 serves one HTML frontend and persists state in SQLite. `openpyxl` is the only runtime dependency. The alert channel is an in-app recommendation queue; actions simulate dispatch and receipt. Azure services and production delivery channels remain undecided.
+
+See the README for setup and test commands. Core and HTTP contracts were exercised with failing tests before their implementations. Regression tests cover time leakage, stale data, threshold calculations, deduplication, concurrent deliveries, workbook contracts, restart persistence, and browser workflows. All tests use synthetic data and temporary databases.
 
 ## Proposed working loop
 

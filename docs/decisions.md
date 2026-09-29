@@ -10,3 +10,7 @@ Use this file for decisions that change scope, data contracts, architecture, or 
 | 2026-09-29 | Dashboard channel | Open | Sponsor uses Tableau but described the visualization and notification design as flexible. Choose after an alert review. |
 | 2026-09-29 | Raw workbook in Git | Do not add | GitHub repo is public; sharing permission for the workbook is unconfirmed. Keep extracts outside version control. |
 | 2026-09-29 | Jira connectivity | Open | Atlassian agent connection is available but not connected. Jira site, board key, and GitHub integration state are unknown. |
+| 2026-09-29 | Local implementation | Authorized and implemented | User requested the entire local prototype with TDD, a single HTML frontend, and backend persistence. Python, SQLite, and embedded HTML/CSS/JS meet that request. |
+| 2026-09-29 | Demonstration and evaluation data | Implemented | Deterministic synthetic material histories and 60 held-out scenarios provide immediate, visibly labeled output. Imported workbooks cannot inherit synthetic predictions or scores. |
+| 2026-09-29 | Candidate estimator | Implemented prototype | Schedule adjusted units per load estimated from prior observations is compared with a trailing average. This is an interpretable estimator; production model selection awaits valid labels. |
+| 2026-09-29 | Replenishment workflow | Implemented simulation | Acknowledgement and dispatch persist status. A receipt adds stock once in a database transaction; remaining risk can open a new recommendation. |

@@ -1,27 +1,79 @@
 # Siemens Capstone: Proactive Material Replenishment
 
-This Texas A&M CSCE 482 capstone explores how to warn warehouse staff before materials in factory floor supermarkets run out. Siemens Digitalization and Data sponsors the project.
+This Texas A&M CSCE 482 capstone explores how to warn warehouse staff before materials in factory floor supermarkets run out. The intended outcome is fewer production interruptions caused by reactive replenishment. Siemens Digitalization and Data sponsors the project.
 
-## Project status
+## Run the prototype
 
-This repository establishes the project documentation and local development conventions. The initial prototype will prepare manufacturing extracts, evaluate material risk, and demonstrate actionable replenishment recommendations.
+The prototype has one frontend file, `index.html`, with all styling, JavaScript, and SVG charts embedded. A local Python server supplies the API and persists datasets, source rows, forecast runs, evaluations, policies, recommendations, and simulated receipts in SQLite.
+
+Requires Python 3.11 or newer. From this repository:
+
+```sh
+python3 -m venv .venv
+.venv/bin/python -m pip install -r requirements.txt
+.venv/bin/python server.py
+```
+
+Open **http://127.0.0.1:8765**. If your system Python is older, use `uv venv --python 3.11` followed by `uv pip install --python .venv/bin/python -r requirements.txt` instead.
+
+The first launch creates a deterministic synthetic factory sandbox with 12 materials, a forecast, active recommendations, and an evaluation of 60 held-out simulated scenarios. You can immediately:
+
+1. Inspect inventory trends and projected minimum crossings; change the chart material and time window.
+2. Adjust production demand, minimum stock, warehouse lead time, and warning buffer. Changes persist across reloads and restarts.
+3. Acknowledge or dispatch recommendations and record simulated deliveries. Dispatch changes status; a confirmed receipt increases stock once.
+4. Compare a trailing consumption baseline with a schedule adjusted estimator and download the full evaluation report.
+5. Import an XLSX workbook in **Data workspace** to save its source rows, schema, quality findings, and potential join coverage locally.
+
+The synthetic evaluation demonstrates behavior, not Siemens model accuracy. Workbook imports remain separate from the demo; the provided four-sheet schema lacks verified consumption history, snapshot timing, and business definitions needed for valid depletion forecasting. The interface displays these limitations instead of fabricating predictions.
+
+## Data and output locations
+
+- `data/capstone.sqlite3`: persistent local database, ignored by Git. Closing the server does not erase it.
+- `artifacts/`: desktop and mobile screenshots produced by browser tests, ignored by Git.
+- `outputs/`: optional exported reports, ignored by Git.
+- `handoff.md`: detailed local plan and implementation handoff, always ignored by Git.
+
+To ingest a local workbook at startup or generate a visible JSON evaluation artifact:
+
+```sh
+.venv/bin/python server.py --import-workbook /path/to/workbook.xlsx
+.venv/bin/python server.py --export-report outputs/demo-report.json
+```
+
+Use `--port 8766` for a different port or `--db /path/to/local.sqlite3` for a separate workspace. The server binds to loopback only. Stop it with Ctrl+C. Opening `index.html` directly shows startup instructions; persistence requires the running backend.
+
+## Verification
+
+```sh
+.venv/bin/python -m pip install -r requirements-dev.txt
+.venv/bin/python -m playwright install chromium
+.venv/bin/python -m pytest -q
+```
+
+To run only the backend tests, use `pytest -m 'not browser'`. Browser tests use temporary databases and synthetic workbooks, exercise saved edits, receipt handling, import, export, and mobile layout, and capture screenshots in `artifacts/`. See [evaluation methodology](docs/evaluation.md) for scoring definitions and [architecture](docs/architecture.md) for API contracts.
+
+Live SCADA ingestion, factory system writes, real notifications, cloud deployment, and sponsor UAT remain outside this local implementation. Siemens approval and missing source definitions are still needed for operational use.
 
 ## Start here
 
-- [Project brief](docs/project-brief.md): problem, stakeholders, scope, and source evidence.
-- [Requirements](docs/requirements.md): candidate outcomes and acceptance criteria.
-- [Data inventory](docs/data-inventory.md): supplied workbook structure and feasibility questions.
-- [Development workflow](docs/development.md): team conventions and data handling.
-- [Decision log](docs/decisions.md): confirmed choices and open proposals.
-- [Agent guidance](AGENTS.md): repository context and working rules.
+- [Project brief](docs/project-brief.md): problem, stakeholders, scope, and source of each claim.
+- [Requirements](docs/requirements.md): candidate behaviors, success measures, and open decisions.
+- [Data inventory](docs/data-inventory.md): supplied workbook structure and the feasibility questions it raises.
+- [Development guide](docs/development.md): repository workflow and data handling.
+- [Decision log](docs/decisions.md): confirmed choices and unresolved proposals.
+- [Plan audit](docs/plan-audit.md): changes made to meet the implementation request.
+- [Architecture](docs/architecture.md): backend storage, endpoints, and limitations.
+- [Evaluation](docs/evaluation.md): estimator definitions, scoring, and requirement coverage.
+- [Agent guidance](AGENTS.md): how to work safely and keep project context current.
 
-The detailed local plan is in `handoff.md`, which is always ignored by Git. Raw Siemens data, credentials, generated outputs, and local environments are also excluded from version control. The supplied workbook remains outside this public repository.
+The local handoff must not contain credentials or raw Siemens data.
 
-## Initial scope
+## Working agreement
 
-1. Validate and reconcile available production, schedule, replenishment, and bin data.
-2. Establish a transparent baseline and evaluate whether the data support depletion forecasting.
-3. Produce prioritized, explainable recommendations for warehouse review.
-4. Demonstrate results with clear assumptions and limitations.
+The team uses a hybrid process: agree on the problem, access constraints, and acceptance criteria with Siemens, then iterate on data, modeling, and alert prototypes. Keep a trace from each candidate requirement to a test and sponsor review. Use Jira for sprint ownership when access is available; record durable technical decisions in this repository.
 
-Live factory system writes, SCADA ingestion, and cloud deployment require separate integration decisions. Technical choices in the team plan remain proposals unless supported by sponsor evidence.
+The GitHub repository is currently public. Do not commit or paste the supplied workbook, row level examples, internal links, credentials, or other Siemens material without explicit clearance. The raw workbook is stored outside this repository.
+
+## Current source material
+
+The initial scope is based on the sponsor proposal, September 3 sponsor meeting notes and transcript, team project plan, project management worksheet, September 25 individual update, Jira import CSV, and the supplied `Prod_Capstone_Data.xlsx` workbook in the parent course workspace. These source files are not copied into this repository. See the [project brief](docs/project-brief.md) for how sponsor statements are distinguished from team proposals.

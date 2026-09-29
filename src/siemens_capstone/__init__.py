@@ -1,0 +1,1 @@
+"""Local material replenishment prototype."""
