@@ -1,0 +1,46 @@
+# Local planning handoff is intentionally never committed.
+handoff.md
+
+# Siemens data, exports, credentials, and generated artifacts.
+data/
+*.csv
+*.tsv
+*.xlsx
+*.xls
+*.parquet
+*.feather
+*.db
+*.sqlite*
+*.pkl
+*.joblib
+*.onnx
+*.env
+.env.*
+!.env.example
+*.pem
+*.key
+*.p12
+*.pfx
+outputs/
+artifacts/
+models/
+
+# Python and notebook local state.
+.venv/
+venv/
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.ipynb_checkpoints/
+.coverage
+htmlcov/
+dist/
+build/
+*.egg-info/
+
+# Editor and operating system files.
+.DS_Store
+.idea/
+.vscode/
