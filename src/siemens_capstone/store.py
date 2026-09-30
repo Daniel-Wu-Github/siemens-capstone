@@ -8,6 +8,7 @@ import uuid
 
 from .engine import AS_OF, VERSION, demo_materials, evaluate, number, predict, synthetic_episodes
 from .ingest import inspect_workbook
+from .analytics import ANALYSIS_VERSION, analyze, scenario
 
 
 def now():
@@ -33,6 +34,8 @@ class Store:
                 CREATE TABLE IF NOT EXISTS runs(id TEXT PRIMARY KEY, dataset TEXT, created_at TEXT, payload TEXT NOT NULL);
                 CREATE TABLE IF NOT EXISTS evaluations(id TEXT PRIMARY KEY, dataset TEXT, created_at TEXT, payload TEXT NOT NULL);
                 CREATE TABLE IF NOT EXISTS activity(id TEXT PRIMARY KEY, dataset TEXT, created_at TEXT, message TEXT);
+                CREATE TABLE IF NOT EXISTS analysis_cache(dataset TEXT PRIMARY KEY, version TEXT, payload TEXT NOT NULL);
+                CREATE TABLE IF NOT EXISTS workbook_scenarios(id TEXT PRIMARY KEY, dataset TEXT, created_at TEXT, payload TEXT NOT NULL);
             ''')
             if not db.execute("SELECT id FROM datasets WHERE id='demo'").fetchone():
                 dataset = dict(id='demo', name='Factory sandbox', kind='synthetic', as_of=AS_OF,
@@ -205,8 +208,37 @@ class Store:
         with self.connection() as db:
             return db.execute('SELECT COUNT(*) FROM records WHERE dataset=?', (dataset_id,)).fetchone()[0]
 
+    def insights(self, dataset_id):
+        with self.connection() as db:
+            dataset, quality = self._dataset(db, dataset_id)
+            if dataset['kind'] != 'workbook': raise ValueError('Select an imported workbook to view source analytics.')
+            cached = db.execute('SELECT * FROM analysis_cache WHERE dataset=?', (dataset_id,)).fetchone()
+            if cached and cached['version'] == ANALYSIS_VERSION:
+                result = json.loads(cached['payload'])
+            else:
+                records = {}
+                for row in db.execute('SELECT sheet,payload FROM records WHERE dataset=? ORDER BY sheet,row_number', (dataset_id,)):
+                    records.setdefault(row['sheet'], []).append(json.loads(row['payload']))
+                result = analyze(records, quality.get('date_system', '1900'))
+                result.update(dataset_id=dataset_id, source_checksum=dataset['checksum'], created_at=now())
+                db.execute('INSERT OR REPLACE INTO analysis_cache VALUES(?,?,?)', (dataset_id, ANALYSIS_VERSION, encoded(result)))
+                self._event(db, dataset_id, 'Workbook analytics saved: stock snapshot, transfer cadence, production events, and planned lines.')
+            result['scenarios'] = [json.loads(r['payload']) for r in db.execute('SELECT payload FROM workbook_scenarios WHERE dataset=? ORDER BY rowid DESC LIMIT 10', (dataset_id,))]
+            return result
+
+    def workbook_scenario(self, dataset_id, position_id, usage_multiplier, minimum_stock, lead_hours):
+        analysis = self.insights(dataset_id)
+        result = scenario(analysis, position_id, usage_multiplier, minimum_stock, lead_hours)
+        result.update(id=uuid.uuid4().hex, dataset_id=dataset_id, created_at=now(),
+                      source_checksum=analysis['source_checksum'], analysis_version=ANALYSIS_VERSION)
+        with self.connection() as db:
+            db.execute('INSERT INTO workbook_scenarios VALUES(?,?,?,?)', (result['id'], dataset_id, result['created_at'], encoded(result)))
+            self._event(db, dataset_id, f"Assumption-based scenario saved for {result['material']} / {result['bin']}. Source stock is unchanged.")
+        return result
+
     def export(self, dataset_id):
         state = self.state(dataset_id)
+        if state['dataset']['kind'] == 'workbook': state['insights'] = self.insights(dataset_id)
         with self.connection() as db:
             state['runs'] = [json.loads(r['payload']) for r in db.execute('SELECT payload FROM runs WHERE dataset=? ORDER BY rowid DESC LIMIT 10', (dataset_id,))]
         state['exported_at'] = now()

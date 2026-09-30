@@ -97,3 +97,69 @@ def test_mobile_navigation_and_scenario(tmp_path):
         assert page.evaluate('document.documentElement.scrollWidth <= innerWidth')
         page.screenshot(path='artifacts/mobile.png', full_page=True)
         browser.close()
+
+
+@pytest.mark.browser
+def test_workbook_insights_scenario_saved_and_source_preserved(tmp_path):
+    from io import BytesIO
+    from openpyxl import load_workbook
+    wb = load_workbook(BytesIO(workbook_bytes()))
+    ws = wb['HISTORICAL_SM_REPLENISHMENTS']; ws['E2'] = 60; ws['H2'] = ws['F2'].value
+    buf = BytesIO(); wb.save(buf)
+    with running_server(tmp_path) as base, sync_playwright() as p:
+        browser = p.chromium.launch()
+        page = browser.new_page(viewport={'width': 1440, 'height': 1000})
+        result = page.request.post(base + '/api/import?filename=synthetic-insights.xlsx',
+                                   data=buf.getvalue(), headers={'Content-Type': 'application/octet-stream'})
+        ds = result.json()['id']
+        page.goto(base + '/?dataset=' + ds + '&view=insights')
+        expect(page.get_by_role('heading', name='Your data, put to work.')).to_be_visible()
+        expect(page.get_by_role('heading', name='Stock snapshot review')).to_be_visible()
+        page.get_by_label('Assumed usage multiplier').fill('2')
+        page.get_by_role('button', name='Calculate & save scenario').click()
+        expect(page.locator('#workbook-scenario-result')).to_contain_text('2h')
+        page.reload()
+        expect(page.locator('#workbook-scenario-result')).to_contain_text('2h')
+        page.get_by_label('Search workbook inventory').fill('no-such-part')
+        expect(page.locator('#workbook-inventory')).to_contain_text('No positions match')
+        page.get_by_label('Search workbook inventory').fill('DEMO-X')
+        expect(page.locator('#workbook-inventory tr')).to_have_count(1)
+        saved = page.request.get(base + '/api/insights?dataset=' + ds).json()
+        assert saved['inventory'][0]['stock'] == 10
+        assert saved['scenarios'][0]['kind'] == 'assumption_based'
+        assert page.request.get(base + '/api/state?dataset=' + ds).json()['alerts'] == []
+        browser.close()
+
+
+@pytest.mark.browser
+def test_scenario_response_after_dataset_switch_preserves_ui_context(tmp_path):
+    from io import BytesIO
+    from openpyxl import load_workbook
+    wb = load_workbook(BytesIO(workbook_bytes()))
+    ws = wb['HISTORICAL_SM_REPLENISHMENTS']; ws['E2'] = 60; ws['H2'] = ws['F2'].value
+    buf = BytesIO(); wb.save(buf)
+    with running_server(tmp_path) as base, sync_playwright() as p:
+        browser = p.chromium.launch()
+        page = browser.new_page()
+        errors = []
+        page.on('pageerror', lambda error: errors.append(str(error)))
+        result = page.request.post(base + '/api/import?filename=synthetic-race.xlsx',
+                                   data=buf.getvalue(), headers={'Content-Type': 'application/octet-stream'})
+        ds = result.json()['id']
+        page.goto(base + '/?dataset=' + ds + '&view=insights')
+        expect(page.get_by_role('heading', name='Stock snapshot review')).to_be_visible()
+        def switch_dataset(route):
+            page.get_by_role('combobox', name='Active dataset').select_option('demo')
+            expect(page.get_by_text('Select a manufacturing workbook', exact=True)).to_be_visible()
+            route.continue_()
+        page.route('**/api/workbook-scenario', switch_dataset)
+        with page.expect_response('**/api/workbook-scenario'):
+            page.get_by_role('button', name='Calculate & save scenario').click()
+        expect(page.get_by_role('combobox', name='Active dataset')).to_have_value('demo')
+        expect(page.get_by_text('Select a manufacturing workbook', exact=True)).to_be_visible()
+        expect(page.locator('#toast')).to_contain_text('scenario saved')
+        saved = page.request.get(base + '/api/insights?dataset=' + ds).json()
+        assert len(saved['scenarios']) == 1
+        assert page.locator('#workbook-scenario-result').count() == 0
+        assert not errors
+        browser.close()

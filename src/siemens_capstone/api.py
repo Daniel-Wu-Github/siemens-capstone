@@ -39,6 +39,7 @@ def handler_for(store):
                 if url.path == '/api/health': return self.respond(200, {'status': 'ok', 'storage': 'sqlite', 'mode': 'local prototype'})
                 if url.path == '/api/datasets': return self.respond(200, store.datasets())
                 if url.path == '/api/state': return self.respond(200, store.state(dataset))
+                if url.path == '/api/insights': return self.respond(200, store.insights(dataset))
                 if url.path == '/api/export': return self.respond(200, store.export(dataset), download=True)
                 return self.respond(404, {'error': 'Not found.'})
             except ValueError as exc:
@@ -70,6 +71,7 @@ def handler_for(store):
                 elif url.path == '/api/scenario': result = store.scenario(dataset, body.get('factor'))
                 elif url.path == '/api/policy': result = store.update_policy(dataset, body.get('material'), body.get('policy', {}))
                 elif url.path == '/api/alert': result = store.alert_action(body.get('id'), body.get('action'), body.get('quantity'))
+                elif url.path == '/api/workbook-scenario': result = store.workbook_scenario(dataset, body.get('position_id'), body.get('usage_multiplier'), body.get('minimum_stock'), body.get('lead_hours'))
                 else: return self.respond(404, {'error': 'Not found.'})
                 return self.respond(200, result if result is not None else {'ok': True})
             except (ValueError, TypeError, KeyError, AttributeError) as exc:

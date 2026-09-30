@@ -23,8 +23,11 @@ The first launch creates a deterministic synthetic factory sandbox with 12 mater
 3. Acknowledge or dispatch recommendations and record simulated deliveries. Dispatch changes status; a confirmed receipt increases stock once.
 4. Compare a trailing consumption baseline with a schedule adjusted estimator and download the full evaluation report.
 5. Import an XLSX workbook in **Data workspace** to save its source rows, schema, quality findings, and potential join coverage locally.
+6. Open **Workbook insights** for stock-snapshot review, weekly transfer counts, production activity, planned workload, and a saved what-if scenario using transfer target quantities.
 
 The synthetic evaluation demonstrates behavior, not Siemens model accuracy. Workbook imports remain separate from the demo; the provided four-sheet schema lacks verified consumption history, snapshot timing, and business definitions needed for valid depletion forecasting. The interface displays these limitations instead of fabricating predictions.
+
+The workbook demo uses the available extract immediately. Its what-if calculator explicitly assumes transfer targets were received and average usage follows those quantities. Set a usage multiplier, minimum stock, and warehouse lead time to see the scenario result. Saving it preserves the source stock. See the [workbook demo guide](docs/workbook-demo.md) for the source definitions and assumptions.
 
 ## Data and output locations
 
@@ -64,6 +67,7 @@ Live SCADA ingestion, factory system writes, real notifications, cloud deploymen
 - [Plan audit](docs/plan-audit.md): changes made to meet the implementation request.
 - [Architecture](docs/architecture.md): backend storage, endpoints, and limitations.
 - [Evaluation](docs/evaluation.md): estimator definitions, scoring, and requirement coverage.
+- [Workbook demo](docs/workbook-demo.md): descriptive analytics and assumption-based scenarios from imported data.
 - [Agent guidance](AGENTS.md): how to work safely and keep project context current.
 
 The local handoff must not contain credentials or raw Siemens data.

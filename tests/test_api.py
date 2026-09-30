@@ -46,3 +46,10 @@ def test_http_invalid_inputs_and_cross_origin_rejected(tmp_path):
         assert request(base, '/api/forecast', {'dataset': 'missing'})[0] == 400
         assert request(base, '/api/no-such-route')[0] == 404
         assert request(base, '/../../.git/config')[0] == 404
+
+
+def test_workbook_insights_cannot_be_confused_with_synthetic_forecasts(tmp_path):
+    with running_server(tmp_path) as base:
+        status, body = request(base, '/api/insights?dataset=demo')
+        assert status == 400
+        assert 'workbook' in json.loads(body)['error'].lower()

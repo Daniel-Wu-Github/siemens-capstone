@@ -1,4 +1,6 @@
-# Forecasting and evaluation
+# Forecasting, workbook analysis, and evaluation
+
+The model scores below describe the synthetic sandbox. Imported workbooks use a separate descriptive analysis and explicitly assumed what-if calculator; they receive no synthetic accuracy score. See [workbook demo](workbook-demo.md) for its source grains and assumptions.
 
 ## Estimators
 
@@ -30,12 +32,14 @@ The UI shows both estimators, raw event counts, timing error, a predicted-versus
 
 | Requirement | Implemented evidence | Verification / remaining external gate |
 | --- | --- | --- |
-| R1: Reproducible intake | XLSX upload; persisted source rows, checksum, schema, quality findings, and join coverage | Ingest tests with synthetic invalid rows; source semantics still require Siemens review |
+| R1: Reproducible intake | XLSX upload; persisted source rows, checksum, quality findings, join coverage, and descriptive aggregates | Ingest and analytics tests with synthetic invalid and duplicate rows; source semantics still require Siemens review |
 | R2: Depletion baseline | Six-hour trailing average and minimum-crossing calculation | Tests for threshold edges, missing/stale/future data, invalid units and inputs |
 | R3: Fair model comparison | Schedule estimator and baseline on identical held-out synthetic scenarios | Determinism, metric counts, outcome separation; real validation awaits historical labels |
 | R4: Actionable recommendations | Material/bin, explanation, projected crossing, lead time, priority, acknowledgement, dispatch, receipt | Deduplication, receipt persistence, concurrent-write and rearming tests; operational actionability awaits sponsor UAT |
-| R5: Visible review | Single HTML app; material search and filters, chart selection, time window, comparisons, export | Desktop/mobile browser tests; sponsor acceptance remains open |
+| R5: Visible review | Single HTML app; material filters, selectable charts, workbook inventory and source charts, saved what-if, comparisons, export | Desktop/mobile browser tests and workbook scenario persistence; sponsor acceptance remains open |
 
 ## TDD record
 
 Core forecasting, storage, and import tests were written before the package existed and failed at collection. Their implementations made the initial twenty tests pass. API tests likewise failed before the HTTP module existed. Additional regressions exposed and corrected recommendation ordering; browser checks exercised policy persistence, receipt semantics, imports, exports, and mobile layout. Browser screenshots are saved under ignored `artifacts/`.
+
+Workbook analytics tests cover explicit source grains, duplicate and conflicting rows, calendar windows, unsupported units, scenario persistence, and unchanged imported data. Two additional regressions failed before their fixes: tiny positive target rates were rounded to zero, and a late scenario response could update the UI after a dataset switch. Both were corrected; the complete suite passed 38 tests. A later sandbox change prevented an additional visual recheck of the actual imported workbook; direct SQLite checks verified its saved scenario, source preservation, and local export.
