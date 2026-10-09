@@ -1,6 +1,6 @@
 # Data inventory and handling
 
-The supplied `Prod_Capstone_Data.xlsx` is outside the Git repository. The observations below describe sheet structure only. Row data must not be copied into this public repository.
+The supplied `Prod_Capstone_Data.xlsx` lives in the Git-ignored `data/` folder and is never committed. The observations below describe sheet structure only. Row data must not be copied into this public repository.
 
 | Sheet | Approximate rows | Main fields visible in header | Likely prototype use |
 | --- | ---: | --- | --- |

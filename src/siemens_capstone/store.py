@@ -10,8 +10,7 @@ from .engine import AS_OF, VERSION, demo_materials, evaluate, number, predict, s
 from .ingest import inspect_reference, inspect_workbook
 from .analytics import ANALYSIS_VERSION, analyze, scenario
 from . import alerts as stock_alerts
-
-OUTBOX = Path(__file__).resolve().parents[2] / 'outputs' / 'outbox'
+from .paths import OUTBOX
 
 
 def now():

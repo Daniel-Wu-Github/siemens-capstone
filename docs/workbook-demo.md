@@ -1,6 +1,6 @@
 # Workbook demo
 
-Import the supplied XLSX in Data workspace or with `server.py --import-workbook /path/to/workbook.xlsx`, then select the saved dataset and open Workbook insights. This view runs entirely on the available four-sheet extract and persists its results locally. It has no dependency on live Siemens access or additional data.
+Import the supplied XLSX in Data workspace or with `server.py --import-workbook data/Prod_Capstone_Data.xlsx`, then select the saved dataset and open Workbook insights. This view runs entirely on the available four-sheet extract and persists its results locally. It has no dependency on live Siemens access or additional data.
 
 ## What is directly observed
 

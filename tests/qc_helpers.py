@@ -17,12 +17,12 @@ from openpyxl import Workbook
 
 from siemens_capstone import alerts
 from siemens_capstone.api import handler_for
+from siemens_capstone.paths import DATA_DIR
 from siemens_capstone.store import Store
 
-PARENT = Path(__file__).resolve().parents[2]
-REAL_PROD = PARENT / 'Prod_Capstone_Data.xlsx'
-REAL_MINMAX = PARENT / 'Min_Max-SM.xlsx'
-REAL_BOM = PARENT / 'BOMEXAMPLE.xlsx'
+REAL_PROD = DATA_DIR / 'Prod_Capstone_Data.xlsx'
+REAL_MINMAX = DATA_DIR / 'Min_Max-SM.xlsx'
+REAL_BOM = DATA_DIR / 'BOMEXAMPLE.xlsx'
 REAL_FILES_PRESENT = all(p.exists() for p in (REAL_PROD, REAL_MINMAX, REAL_BOM))
 
 BIN_HEADER = ['Material', 'Material Description', 'Storage Type', 'Storage Bin', 'Available stock', 'Base Unit of Measure']

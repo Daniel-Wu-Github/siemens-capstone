@@ -9,13 +9,14 @@ import sys
 ROOT = Path(__file__).resolve().parent
 sys.path.insert(0, str(ROOT / 'src'))
 from siemens_capstone.api import handler_for
+from siemens_capstone.paths import DB_PATH
 from siemens_capstone.store import Store
 
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--port', type=int, default=8765)
-    parser.add_argument('--db', type=Path, default=ROOT / 'data' / 'capstone.sqlite3')
+    parser.add_argument('--db', type=Path, default=DB_PATH)
     parser.add_argument('--import-workbook', type=Path)
     parser.add_argument('--attach', type=Path, action='append', default=[], help='Reference file (tolerances, BOM, snapshot) attached to the imported workbook; repeatable.')
     parser.add_argument('--as-of', help='Snapshot date YYYY-MM-DD for attached stock snapshot files.')

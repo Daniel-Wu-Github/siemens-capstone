@@ -1,6 +1,6 @@
 """Independent QC performance tests at real-file size (2,317 positions, ~31k transfers, ~76k production rows).
 
-Synthetic data is generated deterministically (seed 482); real-file timings run only when ../ files exist.
+Synthetic data is generated deterministically (seed 482); real-file timings run only when data/ files exist.
 Timings are printed (use -s / -rP). Thresholds are deliberately generous (about 5-10x measured on a laptop)
 so they catch order-of-magnitude regressions, not noise.
 """
@@ -98,7 +98,7 @@ def test_repeated_page_loads_stay_fast_and_silent(big):
     assert per < LIMITS['stock_view'] and eml_count(tmp / 'outbox') == n
 
 
-@pytest.mark.skipif(not REAL_FILES_PRESENT, reason='Siemens files not present in ../')
+@pytest.mark.skipif(not REAL_FILES_PRESENT, reason='Siemens files not present in data/')
 def test_real_file_timings(tmp_path):
     store, ds, imports = real_store()
     for k, v in imports.items(): print(f'PERF real_{k}: {v:.3f}s')

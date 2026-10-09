@@ -2,7 +2,7 @@
 
 Read `README.md`, `docs/project-brief.md`, `docs/requirements.md`, `docs/data-inventory.md`, and `docs/decisions.md` before changing implementation or scope. Read local `handoff.md` when available. It is ignored by Git and is not a substitute for committed project documentation.
 
-- The repository is public. Do not commit raw Siemens data, sample rows, confidential documents, credentials, tokens, or internal URLs. Keep data outside the repository unless Siemens explicitly approves a publishable fixture.
+- The repository is public. Do not commit raw Siemens data, sample rows, confidential documents, credentials, tokens, or internal URLs. Keep Siemens files only in the Git-ignored `data/` folder at the repository root unless Siemens explicitly approves a publishable fixture.
 - Identify whether a statement is sponsor confirmed, team proposed, or still an assumption. Record decisions with date, decision maker, and evidence in `docs/decisions.md`.
 - Prefer a reproducible offline prototype from approved, anonymized extracts before proposing live integrations or deployment.
 - Do not claim model accuracy, stockout prevention, security compliance, or operational readiness without corresponding evidence and sponsor review.

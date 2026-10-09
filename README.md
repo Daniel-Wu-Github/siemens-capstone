@@ -31,6 +31,7 @@ The workbook demo uses the available extract immediately. Its what-if calculator
 
 ## Data and output locations
 
+- `data/`: the single local data folder, ignored by Git. Place the Siemens workbooks here (`Prod_Capstone_Data.xlsx`, `Min_Max-SM.xlsx`, `BOMEXAMPLE.xlsx`, `Most_Replen_Summer.xlsx`); the real-file tests read them from this folder and skip when they are absent.
 - `data/capstone.sqlite3`: persistent local database, ignored by Git. Closing the server does not erase it.
 - `artifacts/`: desktop and mobile screenshots produced by browser tests, ignored by Git.
 - `outputs/`: optional exported reports, ignored by Git.
@@ -39,7 +40,7 @@ The workbook demo uses the available extract immediately. Its what-if calculator
 To ingest a local workbook at startup or generate a visible JSON evaluation artifact:
 
 ```sh
-.venv/bin/python server.py --import-workbook /path/to/workbook.xlsx
+.venv/bin/python server.py --import-workbook data/Prod_Capstone_Data.xlsx --attach data/Min_Max-SM.xlsx --attach data/BOMEXAMPLE.xlsx
 .venv/bin/python server.py --export-report outputs/demo-report.json
 ```
 
@@ -77,8 +78,8 @@ The local handoff must not contain credentials or raw Siemens data.
 
 The team uses a hybrid process: agree on the problem, access constraints, and acceptance criteria with Siemens, then iterate on data, modeling, and alert prototypes. Keep a trace from each candidate requirement to a test and sponsor review. Use Jira for sprint ownership when access is available; record durable technical decisions in this repository.
 
-The GitHub repository is currently public. Do not commit or paste the supplied workbook, row level examples, internal links, credentials, or other Siemens material without explicit clearance. The raw workbook is stored outside this repository.
+The GitHub repository is currently public. Do not commit or paste the supplied workbook, row level examples, internal links, credentials, or other Siemens material without explicit clearance. Raw workbooks live only in the Git-ignored `data/` folder.
 
 ## Current source material
 
-The initial scope is based on the sponsor proposal, September 3 sponsor meeting notes and transcript, team project plan, project management worksheet, September 25 individual update, Jira import CSV, and the supplied `Prod_Capstone_Data.xlsx` workbook in the parent course workspace. These source files are not copied into this repository. See the [project brief](docs/project-brief.md) for how sponsor statements are distinguished from team proposals.
+The initial scope is based on the sponsor proposal, September 3 sponsor meeting notes and transcript, team project plan, project management worksheet, September 25 individual update, Jira import CSV, and the supplied `Prod_Capstone_Data.xlsx` workbook, kept locally in the Git-ignored `data/` folder. These source files are never committed. See the [project brief](docs/project-brief.md) for how sponsor statements are distinguished from team proposals.

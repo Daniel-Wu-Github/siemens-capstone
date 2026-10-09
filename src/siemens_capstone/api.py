@@ -1,14 +1,12 @@
 """Loopback HTTP API. No remote services, authentication, or production dispatch."""
 from http.server import BaseHTTPRequestHandler
 import json
-from pathlib import Path
 import sys
 import traceback
 from urllib.parse import parse_qs, urlsplit
 
 from .ingest import is_full_workbook
-
-HTML = Path(__file__).resolve().parents[2] / 'index.html'
+from .paths import INDEX_HTML as HTML
 MAX_UPLOAD = 32 * 1024 * 1024
 
 

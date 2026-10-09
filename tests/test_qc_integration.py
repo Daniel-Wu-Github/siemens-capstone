@@ -430,7 +430,7 @@ def test_channel_status_is_exposed_without_urls(tmp_path):
 
 
 # ------------------------------------------------------------------ real data (read-only, aggregates only)
-real = pytest.mark.skipif(not REAL_FILES_PRESENT, reason='Siemens files not present in ../')
+real = pytest.mark.skipif(not REAL_FILES_PRESENT, reason='Siemens files not present in data/')
 
 
 @pytest.fixture(scope='module')
