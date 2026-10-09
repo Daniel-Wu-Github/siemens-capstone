@@ -40,8 +40,9 @@ def test_inspection_reports_duplicates_bad_quantity_and_join_gaps():
 
 def test_import_deduplicated_by_checksum_persists_rows(tmp_path):
     store = Store(tmp_path / 'test.sqlite3')
-    first = store.import_workbook(workbook_bytes(), 'synthetic.xlsx')
-    second = store.import_workbook(workbook_bytes(), 'synthetic.xlsx')
+    payload = workbook_bytes()
+    first = store.import_workbook(payload, 'synthetic.xlsx')
+    second = store.import_workbook(payload, 'synthetic.xlsx')
     assert first['id'] == second['id']
     state = Store(tmp_path / 'test.sqlite3').state(first['id'])
     assert state['dataset']['kind'] == 'workbook'
