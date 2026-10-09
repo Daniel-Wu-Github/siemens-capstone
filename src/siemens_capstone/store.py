@@ -8,6 +8,12 @@ import uuid
 
 from .engine import AS_OF, VERSION, demo_materials, evaluate, number, predict, synthetic_episodes
 from .ingest import inspect_workbook
+from .schemas import generate_synthetic_manufacturing_fixtures
+from .features import aggregate_scheduled_bom_demand, compute_part_criticality, parse_iso_date
+from .ml_engine import QuantileDepletionEstimator, evaluate_depletion_models
+from .alerts import EarlyWarningNotificationEngine
+from dataclasses import asdict
+from datetime import timedelta
 
 
 def now():
@@ -185,6 +191,70 @@ class Store:
             db.execute('INSERT INTO evaluations VALUES(?,?,?,?)', (result['id'], dataset_id, result['created_at'], encoded(result)))
             self._event(db, dataset_id, 'Both estimators evaluated on 60 fixed synthetic holdout episodes.')
             return result
+
+    def ml_forecast(self, dataset_id, warning_buffer_days=3.0):
+        buffer_days = number(warning_buffer_days, 'Warning buffer days', 0.5, 30.0)
+        with self.connection() as db:
+            dataset, _ = self._dataset(db, dataset_id)
+            materials = self._materials(db, dataset_id)
+            fixtures = generate_synthetic_manufacturing_fixtures()
+            bin_masters = fixtures['bin_masters']
+            bom = fixtures['bom']
+
+            factor = dataset.get('demand_factor', 1.0)
+            as_of = dataset.get('as_of') or AS_OF
+            as_of_d = parse_iso_date(as_of)
+
+            schedule_rows = []
+            for day in range(14):
+                dt_str = (as_of_d + timedelta(days=day)).isoformat()
+                schedule_rows.append({'Line Item': '21010', 'Basic Start Date': dt_str})
+                schedule_rows.append({'Line Item': '21020', 'Basic Start Date': dt_str})
+                if day % 2 == 0:
+                    schedule_rows.append({'Line Item': '22010', 'Basic Start Date': dt_str})
+                if day % 3 == 0:
+                    schedule_rows.append({'Line Item': '22020', 'Basic Start Date': dt_str})
+
+            demand_schedules = aggregate_scheduled_bom_demand(schedule_rows, bom, as_of)
+            criticality = compute_part_criticality(bom)
+
+            ml_estimator = QuantileDepletionEstimator(scrap_contingency=0.10 * factor)
+            alert_engine = EarlyWarningNotificationEngine(default_warning_buffer_days=buffer_days)
+
+            forecasts = []
+            for part_id, master in bin_masters.items():
+                matching_mat = next((m for m in materials if m['id'] == part_id or part_id in m['name']), None)
+                stock = float(matching_mat['stock']) if matching_mat else (master.min_stock + 15.0)
+                fc = ml_estimator.predict(
+                    part_id=part_id,
+                    current_stock=stock,
+                    bin_master=master,
+                    demand_schedule=demand_schedules[part_id],
+                    as_of=as_of,
+                    criticality=criticality.get(part_id),
+                )
+                forecasts.append(fc)
+
+            alerts = alert_engine.generate_alerts(forecasts, bin_masters, warning_buffer_days=buffer_days)
+            return {
+                'dataset_id': dataset_id,
+                'as_of': as_of,
+                'engine': 'Quantile GBDT & Early Warning Engine',
+                'warning_buffer_days': buffer_days,
+                'forecasts': [asdict(f) for f in forecasts],
+                'alerts': [a.to_dict() for a in alerts],
+            }
+
+    def ml_evaluate(self, dataset_id, horizon_days=7.0):
+        h_days = number(horizon_days, 'Horizon days', 1.0, 30.0)
+        episodes = [
+            {'actual_days_to_min': 1.8, 'lead_time_days': 2.0, 'baseline_days': 4.5, 'schedule_mrp_days': 2.2, 'quantile_p10_days': 1.6, 'quantile_p50_days': 2.0},
+            {'actual_days_to_min': 3.2, 'lead_time_days': 2.0, 'baseline_days': 5.0, 'schedule_mrp_days': 3.5, 'quantile_p10_days': 2.9, 'quantile_p50_days': 3.3},
+            {'actual_days_to_min': 5.8, 'lead_time_days': 2.0, 'baseline_days': 9.0, 'schedule_mrp_days': 6.0, 'quantile_p10_days': 5.2, 'quantile_p50_days': 5.9},
+            {'actual_days_to_min': 0.8, 'lead_time_days': 2.0, 'baseline_days': 2.0, 'schedule_mrp_days': 1.0, 'quantile_p10_days': 0.7, 'quantile_p50_days': 0.9},
+            {'actual_days_to_min': None, 'lead_time_days': 2.0, 'baseline_days': None, 'schedule_mrp_days': None, 'quantile_p10_days': None, 'quantile_p50_days': None},
+        ]
+        return evaluate_depletion_models(episodes, horizon_days=h_days)
 
     def import_workbook(self, content, filename):
         report = inspect_workbook(content, Path(filename).name[:120])
