@@ -84,30 +84,31 @@ class QuantileDepletionEstimator:
             d_str = curr_d.isoformat()
             planned_draw = daily_plan.get(d_str, 0.0)
 
-            if day_offset > 0:
-                cum_p10_draw += planned_draw * p10_mult
-                cum_p50_draw += planned_draw * p50_mult
-                cum_p90_draw += planned_draw * p90_mult
-                running_stock = max(0.0, running_stock - planned_draw)
+            cum_p10_draw += planned_draw * p10_mult
+            cum_p50_draw += planned_draw * p50_mult
+            cum_p90_draw += planned_draw * p90_mult
+            running_stock = max(0.0, running_stock - planned_draw)
 
-                if p10_crossing is None and (stock - cum_p10_draw) <= min_threshold:
-                    # Interpolate fractional day
-                    excess = (stock - (cum_p10_draw - planned_draw * p10_mult)) - min_threshold
-                    draw_today = planned_draw * p10_mult
-                    frac = excess / draw_today if draw_today > 0 else 0.0
-                    p10_crossing = round(day_offset - 1 + max(0.0, min(1.0, frac)), 2)
+            if p10_crossing is None and (stock - cum_p10_draw) <= min_threshold:
+                prev_stock = stock - (cum_p10_draw - planned_draw * p10_mult)
+                excess = prev_stock - min_threshold
+                draw_today = planned_draw * p10_mult
+                frac = excess / draw_today if draw_today > 0 else 0.0
+                p10_crossing = round(day_offset + max(0.0, min(1.0, frac)), 2)
 
-                if p50_crossing is None and (stock - cum_p50_draw) <= min_threshold:
-                    excess = (stock - (cum_p50_draw - planned_draw * p50_mult)) - min_threshold
-                    draw_today = planned_draw * p50_mult
-                    frac = excess / draw_today if draw_today > 0 else 0.0
-                    p50_crossing = round(day_offset - 1 + max(0.0, min(1.0, frac)), 2)
+            if p50_crossing is None and (stock - cum_p50_draw) <= min_threshold:
+                prev_stock = stock - (cum_p50_draw - planned_draw * p50_mult)
+                excess = prev_stock - min_threshold
+                draw_today = planned_draw * p50_mult
+                frac = excess / draw_today if draw_today > 0 else 0.0
+                p50_crossing = round(day_offset + max(0.0, min(1.0, frac)), 2)
 
-                if p90_crossing is None and (stock - cum_p90_draw) <= min_threshold:
-                    excess = (stock - (cum_p90_draw - planned_draw * p90_mult)) - min_threshold
-                    draw_today = planned_draw * p90_mult
-                    frac = excess / draw_today if draw_today > 0 else 0.0
-                    p90_crossing = round(day_offset - 1 + max(0.0, min(1.0, frac)), 2)
+            if p90_crossing is None and (stock - cum_p90_draw) <= min_threshold:
+                prev_stock = stock - (cum_p90_draw - planned_draw * p90_mult)
+                excess = prev_stock - min_threshold
+                draw_today = planned_draw * p90_mult
+                frac = excess / draw_today if draw_today > 0 else 0.0
+                p90_crossing = round(day_offset + max(0.0, min(1.0, frac)), 2)
 
             trajectory.append({
                 'day_offset': day_offset,
