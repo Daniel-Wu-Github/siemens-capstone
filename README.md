@@ -68,6 +68,7 @@ Live SCADA ingestion, factory system writes, real notifications, cloud deploymen
 - [Architecture](docs/architecture.md): backend storage, endpoints, and limitations.
 - [Evaluation](docs/evaluation.md): estimator definitions, scoring, and requirement coverage.
 - [Workbook demo](docs/workbook-demo.md): descriptive analytics and assumption-based scenarios from imported data.
+- [Stock alerts](docs/alerts.md): Phase 1 reactive alerts, simulated stock edits, and email/Teams/webhook delivery.
 - [Agent guidance](AGENTS.md): how to work safely and keep project context current.
 
 The local handoff must not contain credentials or raw Siemens data.

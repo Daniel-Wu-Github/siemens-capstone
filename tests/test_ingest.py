@@ -56,3 +56,49 @@ def test_missing_sheets_and_invalid_file_do_not_make_a_dataset(tmp_path):
     before = len(store.datasets())
     with pytest.raises(ValueError): store.import_workbook(b'not an excel file', 'bad.xlsx')
     assert len(store.datasets()) == before
+
+
+def table_bytes(sheets):
+    wb = Workbook(); wb.remove(wb.active)
+    for name, rows in sheets.items():
+        ws = wb.create_sheet(name)
+        for row in rows: ws.append(row)
+    out = BytesIO(); wb.save(out); return out.getvalue()
+
+
+TOLERANCES = [['Part', 'Description', 'Type', 'Location', 'Min', 'Max'], ['PART-A', 'Synthetic', '401', 'A1', 5, 20], ['PART-B', 'Synthetic', '401', 'B1', 0, 0]]
+BOM = [['Item', 'Description', 'Part', 'Qty', 'Mat Type', 'SubAssembly'], [10, 'Synthetic', 'PART-A', 2, 'X', ''], [10, 'Synthetic', 'US2:PART-C', 1, 'X', '']]
+SNAPSHOT = [['Material', 'Storage Bin', 'Available stock'], ['PART-A', 'A1', 8]]
+
+
+def test_inspect_reference_detects_kind_by_headers():
+    from siemens_capstone.ingest import inspect_reference
+    tol = inspect_reference(table_bytes({'Sheet3': TOLERANCES}), 't.xlsx')
+    assert tol['kind'] == 'tolerances' and tol['rows'] == 2 and tol['as_of'] is None and tol['checksum']
+    bom = inspect_reference(table_bytes({'Routings': [['Item', 'Routing'], [10, 'R']], 'Full BOM': BOM}), 'b.xlsx')
+    assert bom['kind'] == 'bom' and bom['rows'] == 2
+    snap = inspect_reference(table_bytes({'S': SNAPSHOT}), 's.xlsx', '2026-10-01')
+    assert snap['kind'] == 'snapshot' and snap['as_of'] == '2026-10-01'
+    csv = inspect_reference(b'Material,Storage Bin,Available stock\nPART-A,A1,4\n', 's.csv', '2026-10-02')
+    assert csv['kind'] == 'snapshot' and csv['rows'] == 1
+
+
+def test_inspect_reference_rejects_unknown_undated_and_oversized():
+    from siemens_capstone.ingest import inspect_reference
+    with pytest.raises(ValueError, match='Unrecognized reference file'): inspect_reference(table_bytes({'S': [['A', 'B'], [1, 2]]}), 'x.xlsx')
+    with pytest.raises(ValueError, match='snapshot date'): inspect_reference(table_bytes({'S': SNAPSHOT}), 's.xlsx')
+    with pytest.raises(ValueError, match='snapshot date'): inspect_reference(table_bytes({'S': SNAPSHOT}), 's.xlsx', '10/01/2026')
+    with pytest.raises(ValueError): inspect_reference(b'', 'x.xlsx')
+    with pytest.raises(ValueError): inspect_reference(b'not a workbook', 'x.xlsx')
+
+
+def test_inspect_reference_reports_duplicates_and_bad_numbers():
+    from siemens_capstone.ingest import inspect_reference
+    rows = TOLERANCES + [['PART-A', 'Dup', '401', 'A1', 'x', 9]]
+    codes = {f['code'] for f in inspect_reference(table_bytes({'Sheet3': rows}), 't.xlsx')['findings']}
+    assert {'duplicate_key', 'invalid_number'} <= codes
+
+
+def test_blockers_describe_current_gaps():
+    blockers = ' '.join(inspect_workbook(workbook_bytes(), 's.xlsx')['blockers'])
+    assert 'stock history' in blockers and 'lead time' in blockers and 'BOM' in blockers and 'tolerance' in blockers.lower()

@@ -7,8 +7,11 @@ import sqlite3
 import uuid
 
 from .engine import AS_OF, VERSION, demo_materials, evaluate, number, predict, synthetic_episodes
-from .ingest import inspect_workbook
+from .ingest import inspect_reference, inspect_workbook
 from .analytics import ANALYSIS_VERSION, analyze, scenario
+from . import alerts as stock_alerts
+
+OUTBOX = Path(__file__).resolve().parents[2] / 'outputs' / 'outbox'
 
 
 def now():
@@ -20,8 +23,9 @@ def encoded(value):
 
 
 class Store:
-    def __init__(self, path):
+    def __init__(self, path, alert_config=None):
         self.path = Path(path)
+        self.alert_config = alert_config or stock_alerts.config()
         self.path.parent.mkdir(parents=True, exist_ok=True)
         with self.connection() as db:
             db.executescript('''
@@ -35,7 +39,13 @@ class Store:
                 CREATE TABLE IF NOT EXISTS evaluations(id TEXT PRIMARY KEY, dataset TEXT, created_at TEXT, payload TEXT NOT NULL);
                 CREATE TABLE IF NOT EXISTS activity(id TEXT PRIMARY KEY, dataset TEXT, created_at TEXT, message TEXT);
                 CREATE TABLE IF NOT EXISTS analysis_cache(dataset TEXT PRIMARY KEY, version TEXT, payload TEXT NOT NULL);
+                CREATE TABLE IF NOT EXISTS "references"(id TEXT PRIMARY KEY, dataset TEXT, kind TEXT, checksum TEXT, as_of TEXT, created_at TEXT, payload TEXT NOT NULL);
+                CREATE UNIQUE INDEX IF NOT EXISTS reference_dedupe ON "references"(dataset,kind,checksum,as_of);
                 CREATE TABLE IF NOT EXISTS workbook_scenarios(id TEXT PRIMARY KEY, dataset TEXT, created_at TEXT, payload TEXT NOT NULL);
+                CREATE TABLE IF NOT EXISTS stock_overrides(dataset TEXT, position TEXT, available REAL NOT NULL, updated_at TEXT, PRIMARY KEY(dataset,position));
+                CREATE TABLE IF NOT EXISTS stock_alerts(id TEXT PRIMARY KEY, dataset TEXT, position TEXT, status TEXT, payload TEXT NOT NULL);
+                CREATE UNIQUE INDEX IF NOT EXISTS open_stock_alert ON stock_alerts(dataset,position) WHERE status != 'Resolved';
+                CREATE TABLE IF NOT EXISTS notifications(id TEXT PRIMARY KEY, dataset TEXT, created_at TEXT, payload TEXT NOT NULL);
             ''')
             if not db.execute("SELECT id FROM datasets WHERE id='demo'").fetchone():
                 dataset = dict(id='demo', name='Factory sandbox', kind='synthetic', as_of=AS_OF,
@@ -59,8 +69,8 @@ class Store:
     def connection(self):
         db = sqlite3.connect(self.path, timeout=30)
         db.row_factory = sqlite3.Row
-        db.execute('BEGIN IMMEDIATE')
         try:
+            db.execute('BEGIN IMMEDIATE')
             with db:
                 yield db
         finally:
@@ -204,6 +214,29 @@ class Store:
             self._event(db, dataset_id, f"Imported {report['total_rows']:,} rows from four expected source sheets. Original values retained in local SQLite.")
         return dataset
 
+    def import_reference(self, dataset_id, content, filename, as_of=None):
+        report = inspect_reference(content, Path(filename).name[:120], as_of)
+        with self.connection() as db:
+            dataset, _ = self._dataset(db, dataset_id)
+            if dataset['kind'] != 'workbook': raise ValueError('Reference files attach to an imported workbook dataset.')
+            db.execute('INSERT INTO "references" VALUES(?,?,?,?,?,?,?) ON CONFLICT(dataset,kind,checksum,as_of) DO UPDATE SET created_at=excluded.created_at',
+                       (uuid.uuid4().hex, dataset_id, report['kind'], report['checksum'], report['as_of'] or '', now(), encoded(report['records'])))
+            db.execute('DELETE FROM analysis_cache WHERE dataset=?', (dataset_id,))
+            self._event(db, dataset_id, f"Reference file attached ({report['kind']}, {report['rows']:,} rows). Analytics will be recomputed.")
+            # New tolerances or a newer snapshot can open or resolve alerts; announce those now, not on the next edit.
+            changes = self._sync_changes(db, dataset_id)
+        self._announce(dataset_id, changes)
+        return dict(kind=report['kind'], dataset_id=dataset_id, rows=report['rows'], as_of=report['as_of'], findings=report['findings'])
+
+    def _references(self, db, dataset_id):
+        refs = dict(tolerances=None, bom=None, snapshots=[])
+        for kind in ('tolerances', 'bom'):
+            row = db.execute('SELECT payload FROM "references" WHERE dataset=? AND kind=? ORDER BY created_at DESC, rowid DESC LIMIT 1', (dataset_id, kind)).fetchone()
+            if row: refs[kind] = json.loads(row['payload'])
+        refs['snapshots'] = [dict(as_of=r['as_of'], rows=json.loads(r['payload'])) for r in
+                             db.execute('SELECT as_of,payload FROM "references" WHERE dataset=? AND kind=\'snapshot\' ORDER BY as_of, created_at', (dataset_id,))]
+        return refs
+
     def record_count(self, dataset_id):
         with self.connection() as db:
             return db.execute('SELECT COUNT(*) FROM records WHERE dataset=?', (dataset_id,)).fetchone()[0]
@@ -219,7 +252,7 @@ class Store:
                 records = {}
                 for row in db.execute('SELECT sheet,payload FROM records WHERE dataset=? ORDER BY sheet,row_number', (dataset_id,)):
                     records.setdefault(row['sheet'], []).append(json.loads(row['payload']))
-                result = analyze(records, quality.get('date_system', '1900'))
+                result = analyze(records, quality.get('date_system', '1900'), self._references(db, dataset_id))
                 result.update(dataset_id=dataset_id, source_checksum=dataset['checksum'], created_at=now())
                 db.execute('INSERT OR REPLACE INTO analysis_cache VALUES(?,?,?)', (dataset_id, ANALYSIS_VERSION, encoded(result)))
                 self._event(db, dataset_id, 'Workbook analytics saved: stock snapshot, transfer cadence, production events, and planned lines.')
@@ -235,6 +268,135 @@ class Store:
             db.execute('INSERT INTO workbook_scenarios VALUES(?,?,?,?)', (result['id'], dataset_id, result['created_at'], encoded(result)))
             self._event(db, dataset_id, f"Assumption-based scenario saved for {result['material']} / {result['bin']}. Source stock is unchanged.")
         return result
+
+    # ---- Phase 1 reactive stock alerts ------------------------------------------------
+    def _stock_positions(self, db, dataset_id):
+        dataset, _ = self._dataset(db, dataset_id)
+        if dataset['kind'] != 'workbook': raise ValueError('Select an imported workbook to use stock alerts.')
+        refs = self._references(db, dataset_id)
+        if refs['snapshots']:
+            latest = refs['snapshots'][-1]; rows, as_of = latest['rows'], latest['as_of']
+        else:
+            rows = [json.loads(r['payload']) for r in db.execute("SELECT payload FROM records WHERE dataset=? AND sheet='BIN_STATUS_EXAMPLE' ORDER BY row_number", (dataset_id,))]
+            as_of = None
+        overrides = {r['position']: r['available'] for r in db.execute('SELECT position,available FROM stock_overrides WHERE dataset=?', (dataset_id,))}
+        items = stock_alerts.evaluate(stock_alerts.positions(rows, refs['tolerances'], overrides), self.alert_config['rule'])
+        return items, as_of, refs['tolerances'] is not None
+
+    RESOLUTIONS = {'OK': 'recovered', 'No tolerance': 'minimum no longer set', 'No stock': 'no stock reading'}
+
+    def _sync_stock_alerts(self, db, dataset_id, items):
+        """Open one alert per position in breach; resolve every open alert whose position is no longer in breach."""
+        open_rows = {r['position']: r for r in db.execute("SELECT * FROM stock_alerts WHERE dataset=? AND status != 'Resolved'", (dataset_id,))}
+        new, resolved = [], []
+        for p in items:
+            row = open_rows.pop(p['key'], None)
+            snapshot = {k: p[k] for k in ('material', 'description', 'supermarket', 'storage_type', 'bin', 'unit', 'available', 'min', 'max', 'note', 'overridden')}
+            if p['status'] == 'Alert':
+                if row:
+                    payload = json.loads(row['payload']); payload.update(snapshot, updated_at=now())
+                    db.execute('UPDATE stock_alerts SET payload=? WHERE id=?', (encoded(payload), row['id']))
+                else:
+                    alert = dict(snapshot, id=uuid.uuid4().hex, position=p['key'], status='Open', created_at=now())
+                    db.execute('INSERT INTO stock_alerts VALUES(?,?,?,?,?)', (alert['id'], dataset_id, p['key'], 'Open', encoded(alert)))
+                    new.append(alert)
+            elif row:
+                payload = json.loads(row['payload']); payload.update(snapshot, status='Resolved', resolved_at=now(), resolution=self.RESOLUTIONS[p['status']])
+                db.execute("UPDATE stock_alerts SET status='Resolved', payload=? WHERE id=?", (encoded(payload), row['id']))
+                resolved.append(payload)
+        for row in open_rows.values():  # positions that left the snapshot
+            payload = json.loads(row['payload']); payload.update(status='Resolved', resolved_at=now(), resolution='position not in current snapshot')
+            db.execute("UPDATE stock_alerts SET status='Resolved', payload=? WHERE id=?", (encoded(payload), row['id']))
+            resolved.append(payload)
+        return new, resolved
+
+    def _sync_changes(self, db, dataset_id):
+        """Sync alerts with the current positions; return what changed for _announce (None if nothing did)."""
+        dataset, _ = self._dataset(db, dataset_id)
+        if dataset['kind'] != 'workbook': return None
+        items, as_of, _ = self._stock_positions(db, dataset_id)
+        new, resolved = self._sync_stock_alerts(db, dataset_id, items)
+        if not (new or resolved): return None
+        return dict(as_of=as_of, new=new, resolved=resolved, open_alerts=self._open_stock_alerts(db, dataset_id))
+
+    def _announce(self, dataset_id, changes):
+        """Every alert change is notified, whatever triggered it. Called after the transaction commits."""
+        if not changes: return None
+        return self._notify(dataset_id, changes['as_of'], changes['new'], changes['resolved'], changes['open_alerts'])
+
+    def _open_stock_alerts(self, db, dataset_id):
+        return [dict(json.loads(r['payload']), status=r['status']) for r in
+                db.execute("SELECT status,payload FROM stock_alerts WHERE dataset=? AND status != 'Resolved' ORDER BY rowid", (dataset_id,))]
+
+    def _notify(self, dataset_id, as_of, new, resolved, open_alerts, digest=False):
+        cfg = self.alert_config
+        p = stock_alerts.payload(dataset_id, cfg['rule'], as_of, new, resolved, open_alerts, cfg['dashboard_url'] or None)
+        sent = stock_alerts.deliver(p, cfg, OUTBOX, digest=open_alerts if digest else None)
+        record = dict(id=p['run_id'], created_at=p['created_at'], summary=p['summary'], digest=digest, **sent)
+        with self.connection() as db:
+            db.execute('INSERT INTO notifications VALUES(?,?,?,?)', (record['id'], dataset_id, record['created_at'], encoded(record)))
+            self._event(db, dataset_id, f"Stock alert notification: {record['subject']} ({', '.join(r['channel'] + ' ' + r['status'] for r in record['results'])}).")
+        return record
+
+    def stock_view(self, dataset_id):
+        with self.connection() as db:
+            changes = self._sync_changes(db, dataset_id)
+            items, as_of, has_tol = self._stock_positions(db, dataset_id)
+            open_alerts = self._open_stock_alerts(db, dataset_id)
+            notes = [json.loads(r['payload']) for r in db.execute('SELECT payload FROM notifications WHERE dataset=? ORDER BY rowid DESC LIMIT 5', (dataset_id,))]
+        return dict(dataset_id=dataset_id, snapshot_as_of=as_of, tolerances_loaded=has_tol, positions=items,
+                    summary=dict(positions=len(items), alerts=sum(p['status'] == 'Alert' for p in items),
+                                 ok=sum(p['status'] == 'OK' for p in items), no_tolerance=sum(p['status'] == 'No tolerance' for p in items),
+                                 overridden=sum(p['overridden'] for p in items)),
+                    open_alerts=open_alerts, notifications=notes, channels=stock_alerts.public_config(self.alert_config),
+                    notification=self._announce(dataset_id, changes))
+
+    def set_available(self, dataset_id, position, available):
+        """Simulate a stock reading for one position. Source files and imported rows are never changed."""
+        with self.connection() as db:
+            baseline = self._sync_changes(db, dataset_id)  # changes that predate this edit get their own notification
+            items, as_of, _ = self._stock_positions(db, dataset_id)
+            if not any(p['key'] == position for p in items): raise ValueError('Stock position not found.')
+            if available is None:
+                db.execute('DELETE FROM stock_overrides WHERE dataset=? AND position=?', (dataset_id, position))
+            else:
+                value = number(available, 'Available stock', 0, 1e6)
+                db.execute('INSERT INTO stock_overrides VALUES(?,?,?,?) ON CONFLICT(dataset,position) DO UPDATE SET available=excluded.available, updated_at=excluded.updated_at',
+                           (dataset_id, position, value, now()))
+            items, as_of, _ = self._stock_positions(db, dataset_id)
+            new, resolved = self._sync_stock_alerts(db, dataset_id, items)
+            open_alerts = self._open_stock_alerts(db, dataset_id)
+            self._event(db, dataset_id, f"Simulated available stock {'reset' if available is None else 'set to ' + stock_alerts.fmt(float(available))} for {position.split('|')[0]}.")
+        self._announce(dataset_id, baseline)
+        notification = self._notify(dataset_id, as_of, new, resolved, open_alerts) if new or resolved else None
+        return dict(new=len(new), resolved=len(resolved), notification=notification)
+
+    def reset_stock(self, dataset_id):
+        with self.connection() as db:
+            baseline = self._sync_changes(db, dataset_id)
+            db.execute('DELETE FROM stock_overrides WHERE dataset=?', (dataset_id,))
+            changes = self._sync_changes(db, dataset_id)
+            self._event(db, dataset_id, 'Simulated stock edits cleared; source snapshot values restored.')
+        self._announce(dataset_id, baseline)
+        notification = self._announce(dataset_id, changes)
+        return dict(new=len(changes['new']) if changes else 0, resolved=len(changes['resolved']) if changes else 0, notification=notification)
+
+    def stock_digest(self, dataset_id):
+        with self.connection() as db:
+            changes = self._sync_changes(db, dataset_id)
+            items, as_of, _ = self._stock_positions(db, dataset_id)
+            open_alerts = self._open_stock_alerts(db, dataset_id)
+        self._announce(dataset_id, changes)
+        return dict(notification=self._notify(dataset_id, as_of, [], [], open_alerts, digest=True))
+
+    def acknowledge_stock_alert(self, alert_id):
+        with self.connection() as db:
+            row = db.execute('SELECT * FROM stock_alerts WHERE id=?', (alert_id,)).fetchone()
+            if not row or row['status'] != 'Open': raise ValueError('Only an open alert can be acknowledged.')
+            payload = json.loads(row['payload']); payload.update(status='Acknowledged', acknowledged_at=now())
+            db.execute("UPDATE stock_alerts SET status='Acknowledged', payload=? WHERE id=?", (encoded(payload), alert_id))
+            self._event(db, row['dataset'], f"Stock alert acknowledged for {payload['material']} / {payload['bin']}.")
+        return dict(ok=True)
 
     def export(self, dataset_id):
         state = self.state(dataset_id)
