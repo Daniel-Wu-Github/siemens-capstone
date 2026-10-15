@@ -46,3 +46,36 @@ def test_http_invalid_inputs_and_cross_origin_rejected(tmp_path):
         assert request(base, '/api/forecast', {'dataset': 'missing'})[0] == 400
         assert request(base, '/api/no-such-route')[0] == 404
         assert request(base, '/../../.git/config')[0] == 404
+
+
+def test_workbook_insights_cannot_be_confused_with_synthetic_forecasts(tmp_path):
+    with running_server(tmp_path) as base:
+        status, body = request(base, '/api/insights?dataset=demo')
+        assert status == 400
+        assert 'workbook' in json.loads(body)['error'].lower()
+
+
+def post_bytes(base, path, content):
+    req = Request(base + path, data=content, headers={'Content-Type': 'application/octet-stream'})
+    try:
+        with urlopen(req) as response: return response.status, json.loads(response.read())
+    except HTTPError as response:
+        return response.code, json.loads(response.read())
+
+
+def test_import_routes_reference_files_by_dataset_param(tmp_path):
+    from test_ingest import workbook_bytes, table_bytes, TOLERANCES, SNAPSHOT
+    with running_server(tmp_path) as base:
+        status, ds = post_bytes(base, '/api/import?filename=w.xlsx', workbook_bytes())
+        assert status == 201 and ds['kind'] == 'workbook'
+        status, again = post_bytes(base, f"/api/import?filename=w.xlsx&dataset={ds['id']}", workbook_bytes())
+        assert status == 201 and again['id'] == ds['id']
+        status, ref = post_bytes(base, f"/api/import?filename=t.xlsx&dataset={ds['id']}", table_bytes({'Sheet3': TOLERANCES}))
+        assert status == 201 and ref['kind'] == 'tolerances' and ref['rows'] == 2
+        status, ref = post_bytes(base, f"/api/import?filename=s.csv&dataset={ds['id']}&as_of=2026-10-01", b'Material,Storage Bin,Available stock\nPART-A,A1,3\n')
+        assert status == 201 and ref['kind'] == 'snapshot' and ref['as_of'] == '2026-10-01'
+        assert post_bytes(base, f"/api/import?filename=s.csv&dataset={ds['id']}", b'Material,Storage Bin,Available stock\nPART-A,A1,3\n')[0] == 400
+        assert post_bytes(base, '/api/import?filename=bad.xlsx', b'junk')[0] == 400
+        assert post_bytes(base, '/api/import?filename=t.xlsx&dataset=demo', table_bytes({'Sheet3': TOLERANCES}))[0] == 400
+        insights = json.loads(request(base, f"/api/insights?dataset={ds['id']}")[1])
+        assert insights['references']['tolerances']['rows'] == 2 and insights['references']['snapshots'][0]['rows'] == 1

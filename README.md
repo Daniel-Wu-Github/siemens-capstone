@@ -23,11 +23,15 @@ The first launch creates a deterministic synthetic factory sandbox with 12 mater
 3. Acknowledge or dispatch recommendations and record simulated deliveries. Dispatch changes status; a confirmed receipt increases stock once.
 4. Compare a trailing consumption baseline with a schedule adjusted estimator and download the full evaluation report.
 5. Import an XLSX workbook in **Data workspace** to save its source rows, schema, quality findings, and potential join coverage locally.
+6. Open **Workbook insights** for stock-snapshot review, weekly transfer counts, production activity, planned workload, and a saved what-if scenario using transfer target quantities.
 
 The synthetic evaluation demonstrates behavior, not Siemens model accuracy. Workbook imports remain separate from the demo; the provided four-sheet schema lacks verified consumption history, snapshot timing, and business definitions needed for valid depletion forecasting. The interface displays these limitations instead of fabricating predictions.
 
+The workbook demo uses the available extract immediately. Its what-if calculator explicitly assumes transfer targets were received and average usage follows those quantities. Set a usage multiplier, minimum stock, and warehouse lead time to see the scenario result. Saving it preserves the source stock. See the [workbook demo guide](docs/workbook-demo.md) for the source definitions and assumptions.
+
 ## Data and output locations
 
+- `data/`: the single local data folder, ignored by Git. Place the Siemens workbooks here (`Prod_Capstone_Data.xlsx`, `Min_Max-SM.xlsx`, `BOMEXAMPLE.xlsx`, `Most_Replen_Summer.xlsx`); the real-file tests read them from this folder and skip when they are absent.
 - `data/capstone.sqlite3`: persistent local database, ignored by Git. Closing the server does not erase it.
 - `artifacts/`: desktop and mobile screenshots produced by browser tests, ignored by Git.
 - `outputs/`: optional exported reports, ignored by Git.
@@ -36,7 +40,7 @@ The synthetic evaluation demonstrates behavior, not Siemens model accuracy. Work
 To ingest a local workbook at startup or generate a visible JSON evaluation artifact:
 
 ```sh
-.venv/bin/python server.py --import-workbook /path/to/workbook.xlsx
+.venv/bin/python server.py --import-workbook data/Prod_Capstone_Data.xlsx --attach data/Min_Max-SM.xlsx --attach data/BOMEXAMPLE.xlsx
 .venv/bin/python server.py --export-report outputs/demo-report.json
 ```
 
@@ -64,6 +68,8 @@ Live SCADA ingestion, factory system writes, real notifications, cloud deploymen
 - [Plan audit](docs/plan-audit.md): changes made to meet the implementation request.
 - [Architecture](docs/architecture.md): backend storage, endpoints, and limitations.
 - [Evaluation](docs/evaluation.md): estimator definitions, scoring, and requirement coverage.
+- [Workbook demo](docs/workbook-demo.md): descriptive analytics and assumption-based scenarios from imported data.
+- [Stock alerts](docs/alerts.md): Phase 1 reactive alerts, simulated stock edits, and email/Teams/webhook delivery.
 - [Agent guidance](AGENTS.md): how to work safely and keep project context current.
 
 The local handoff must not contain credentials or raw Siemens data.
@@ -72,8 +78,8 @@ The local handoff must not contain credentials or raw Siemens data.
 
 The team uses a hybrid process: agree on the problem, access constraints, and acceptance criteria with Siemens, then iterate on data, modeling, and alert prototypes. Keep a trace from each candidate requirement to a test and sponsor review. Use Jira for sprint ownership when access is available; record durable technical decisions in this repository.
 
-The GitHub repository is currently public. Do not commit or paste the supplied workbook, row level examples, internal links, credentials, or other Siemens material without explicit clearance. The raw workbook is stored outside this repository.
+The GitHub repository is currently public. Do not commit or paste the supplied workbook, row level examples, internal links, credentials, or other Siemens material without explicit clearance. Raw workbooks live only in the Git-ignored `data/` folder.
 
 ## Current source material
 
-The initial scope is based on the sponsor proposal, September 3 sponsor meeting notes and transcript, team project plan, project management worksheet, September 25 individual update, Jira import CSV, and the supplied `Prod_Capstone_Data.xlsx` workbook in the parent course workspace. These source files are not copied into this repository. See the [project brief](docs/project-brief.md) for how sponsor statements are distinguished from team proposals.
+The initial scope is based on the sponsor proposal, September 3 sponsor meeting notes and transcript, team project plan, project management worksheet, September 25 individual update, Jira import CSV, and the supplied `Prod_Capstone_Data.xlsx` workbook, kept locally in the Git-ignored `data/` folder. These source files are never committed. See the [project brief](docs/project-brief.md) for how sponsor statements are distinguished from team proposals.

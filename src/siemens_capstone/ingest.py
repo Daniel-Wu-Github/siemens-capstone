@@ -1,7 +1,8 @@
 """Read workbook rows locally and expose aggregate quality evidence."""
+import csv
 from datetime import date, datetime, time, timedelta
 from hashlib import sha256
-from io import BytesIO
+from io import BytesIO, StringIO
 import math
 import re
 from zipfile import ZipFile, BadZipFile
@@ -148,7 +149,93 @@ def inspect_workbook(content, filename):
     repl = tables.get('HISTORICAL_SM_REPLENISHMENTS', [])
     matched = sum((str(r.get('Material', '')).strip(), str(r.get('Dest.Storage Bin', '')).strip()) in bins and bool(r.get('Material')) and bool(r.get('Dest.Storage Bin')) for r in repl)
     joins.append(dict(name='Replenishments → bin snapshot', matched=matched, total=len(repl), description='Transfer rows with matching material + destination bin. These are possible links, not reconstructed consumption.'))
-    blockers = ['No verified historical material consumption or BOM mapping.', 'Bin snapshot has no confirmed as-of time or inventory history.', 'Minimum tolerances, warehouse lead times, and timezone need business definitions.']
+    blockers = ['No stock history yet: the bin snapshot is one undated extract, so depletion cannot be observed until dated snapshots are added.',
+                'Warehouse lead time and the warning horizon are unconfirmed and need a business definition.',
+                'The BOM is one example file; production-order and part coverage is partial and unvalidated.',
+                'Min/Max tolerance gaps: positions without a tolerance row, zero minimums, and rows with min at or above max need business review.']
     return dict(filename=filename, checksum=sha256(content).hexdigest(), date_system=system, timezone='Unconfirmed',
                 total_rows=sum(len(rows) for rows in tables.values()), sheets=summaries, findings=findings,
                 joins=joins, blockers=blockers, forecast_ready=False, records=tables)
+
+
+REFERENCE_KINDS = (  # (kind, required headers, retained columns), checked in this order
+    ('bom', ('Item', 'Part', 'Qty'), ('Item', 'Part', 'Qty')),
+    ('tolerances', ('Part', 'Location', 'Min', 'Max'), ('Part', 'Location', 'Type', 'Min', 'Max')),
+    ('snapshot', ('Material', 'Storage Bin', 'Available stock'), ('Material', 'Storage Type', 'Storage Bin', 'Available stock', 'Base Unit of Measure', 'Storage Unit', 'Special Stock Number')),
+)
+REFERENCE_KEYS = dict(bom=None, tolerances=('Part', 'Location'), snapshot=('Material', 'Storage Type', 'Storage Bin', 'Storage Unit', 'Special Stock Number'))
+REFERENCE_ESSENTIAL = dict(bom=('Item', 'Part'), tolerances=('Part', 'Location'), snapshot=('Material', 'Storage Bin'))
+REFERENCE_NUMBERS = dict(bom=('Qty',), tolerances=('Min', 'Max'), snapshot=('Available stock',))
+
+
+def is_full_workbook(content):
+    try:
+        wb = load_workbook(BytesIO(content), read_only=True, data_only=True)
+        try: return all(name in wb.sheetnames for name in SHEETS)
+        finally: wb.close()
+    except Exception:
+        return False
+
+
+def reference_tables(content, filename):
+    if filename.lower().endswith('.csv'):
+        try: text = content.decode('utf-8-sig')
+        except UnicodeDecodeError: raise ValueError('The CSV file is not UTF-8 text.') from None
+        yield 'csv', csv.reader(StringIO(text)); return
+    try:
+        with ZipFile(BytesIO(content)) as z:
+            if sum(i.file_size for i in z.infolist()) > 350 * 1024 * 1024:
+                raise ValueError('Expanded workbook exceeds the local import limit.')
+        wb = load_workbook(BytesIO(content), read_only=True, data_only=True)
+    except ValueError: raise
+    except (BadZipFile, Exception) as exc:
+        raise ValueError('The file is not a readable XLSX workbook or exceeds the import limit.') from exc
+    try:
+        for name in sorted(wb.sheetnames, key=lambda n: n != 'Full BOM'):
+            if wb[name].max_row and wb[name].max_row > 300001: raise ValueError('A sheet exceeds the 300,000 row limit.')
+            yield name, wb[name].iter_rows(values_only=True)
+    finally:
+        wb.close()
+
+
+def inspect_reference(content, filename, as_of=None):
+    """Classify a Min/Max tolerance, BOM, or dated stock-snapshot file and return aggregate evidence plus clean rows."""
+    if not content or len(content) > 32 * 1024 * 1024:
+        raise ValueError('Upload an XLSX or CSV file under 32 MB.')
+    for sheet, rows in reference_tables(content, filename):
+        rows = iter(rows)
+        header = [str(v).strip() if v is not None else '' for v in next(rows, [])]
+        kind = next((k for k, required, _ in REFERENCE_KINDS if all(h in header for h in required)), None)
+        if kind is None: continue
+        if len([h for h in header if h]) != len(set(h for h in header if h)):
+            raise ValueError(f'{sheet} has duplicate column headings.')
+        if kind == 'snapshot':
+            try:
+                if not isinstance(as_of, str) or len(as_of) != 10: raise ValueError()
+                date.fromisoformat(as_of)
+            except ValueError: raise ValueError('A stock snapshot needs a snapshot date (YYYY-MM-DD).') from None
+        else: as_of = None
+        keep = next(cols for k, _, cols in REFERENCE_KINDS if k == kind)
+        key_fields = [k for k in (REFERENCE_KEYS[kind] or ()) if k in header]
+        clean, seen, counters = [], set(), dict(duplicate_key=0, missing_key=0, invalid_number=0, negative_quantity=0)
+        for index, raw in enumerate(rows):
+            if index >= 300000: raise ValueError('A sheet exceeds the 300,000 row limit.')
+            if all(v is None or v == '' for v in raw): continue
+            row = {k: serializable(v) for k, v in zip(header, raw) if k in keep}
+            key = tuple(identifier(row.get(k)) for k in key_fields)
+            if any(not identifier(row.get(k)) for k in REFERENCE_ESSENTIAL[kind]): counters['missing_key'] += 1
+            if key_fields:
+                if key in seen: counters['duplicate_key'] += 1
+                seen.add(key)
+            for k in REFERENCE_NUMBERS[kind]:
+                try:
+                    n = float(row.get(k))
+                    if not math.isfinite(n): raise ValueError()
+                    if n < 0: counters['negative_quantity'] += 1
+                except (TypeError, ValueError): counters['invalid_number'] += 1
+            clean.append(row)
+        messages = dict(duplicate_key='Repeated keys; the last row wins or quantities are added.', missing_key='Rows lack a required identifier.',
+                        invalid_number='Quantity is missing or not numeric.', negative_quantity='Negative values need business review.')
+        findings = [dict(code=c, severity='warning', sheet=sheet, count=n, message=messages[c]) for c, n in counters.items() if n]
+        return dict(kind=kind, filename=filename, checksum=sha256(content).hexdigest(), rows=len(clean), findings=findings, as_of=as_of, records=clean)
+    raise ValueError('Unrecognized reference file: expected Min/Max tolerances (Part, Location, Min, Max), a BOM (Item, Part, Qty), or a stock snapshot (Material, Storage Bin, Available stock).')

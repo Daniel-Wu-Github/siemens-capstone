@@ -6,10 +6,11 @@ index.html (all CSS, JavaScript, charts)
 server.py → api.py
     ├── engine.py: point-in-time estimates and synthetic evaluation
     ├── ingest.py: XLSX validation, local date normalization, join coverage
+    ├── analytics.py: descriptive workbook summaries and explicit what-if scenarios
     └── store.py → data/capstone.sqlite3
 ```
 
-The UI has four views: overview, materials and recommendations, model evaluation, and data workspace. Changing a policy or scenario saves it and recomputes recommendations atomically. The SQLite database is authoritative; browser refreshes do not reset it. Demo creation is idempotent.
+The UI has five views: overview, materials and recommendations, model evaluation, data workspace, and workbook insights. Synthetic policy and demand edits recompute recommendations atomically. Workbook scenarios save separate assumptions and results while preserving source rows. The SQLite database is authoritative; browser refreshes do not reset it. Demo creation is idempotent.
 
 ## Persistence
 
@@ -22,10 +23,12 @@ The UI has four views: overview, materials and recommendations, model evaluation
 | `runs` | Forecast outputs, policies, scenario factor, engine version, timestamps |
 | `evaluations` | Baseline and candidate metrics, per-episode evidence, protocol, checksum |
 | `activity` | Chronological log of saved changes |
+| `analysis_cache` | Descriptive workbook aggregates, keyed by dataset and analytics version; include the source checksum |
+| `workbook_scenarios` | Selected stock position, assumptions, computed result, source checksum, and timestamp |
 
 SQLite transactions serialize edits. A partial unique index permits only one active recommendation per material/dataset. Receipts validate the prior status and update stock in the same transaction, preventing duplicate or concurrent requests from adding stock twice. A small receipt that leaves the material at risk creates a new recommendation; the prior receipt remains in history.
 
-All source records are kept locally. JSON export includes quality summaries and up to ten recent forecast runs, but does not expose imported row records. Reports from the synthetic dataset include synthetic material histories.
+All source records are kept locally. JSON export includes quality summaries and up to ten recent forecast runs. Workbook exports also include derived position summaries and saved scenarios; these contain material and bin identifiers and must be reviewed before sharing. Original imported row records are not included. Reports from the synthetic dataset include synthetic material histories.
 
 ## HTTP API
 
@@ -35,6 +38,7 @@ All source records are kept locally. JSON export includes quality summaries and 
 | GET | `/api/health` | Local backend status |
 | GET | `/api/datasets` | Saved dataset summaries |
 | GET | `/api/state?dataset=demo` | Current material forecasts, recommendations, latest evaluation, quality and activity |
+| GET | `/api/insights?dataset=<workbook-id>` | Cached stock, transfer, production, and schedule summaries, plus recent saved scenarios |
 | GET | `/api/export?dataset=demo` | Download a saved-state JSON report |
 | POST | `/api/forecast` | Save a run and update recommendations; JSON `{ "dataset": "demo" }` |
 | POST | `/api/evaluate` | Evaluate the fixed synthetic holdout and save results; same body |
@@ -42,6 +46,7 @@ All source records are kept locally. JSON export includes quality summaries and 
 | POST | `/api/policy` | Dataset, material ID, and a `policy` object containing `threshold`, `lead_hours`, `buffer_hours` |
 | POST | `/api/alert` | Recommendation `id`, next `action`, and integer `quantity` for delivery |
 | POST | `/api/import?filename=workbook.xlsx` | Binary XLSX body with `application/octet-stream`; maximum 32 MB |
+| POST | `/api/workbook-scenario` | Dataset, `position_id`, `usage_multiplier` (0.1–5), `minimum_stock` (0–1,000,000), and `lead_hours` (0.1–168); saves an assumption-based result without changing source stock |
 
 Alert transitions are Open → Acknowledged → Dispatched → Delivered, with direct Open → Dispatched also supported. This records a simulation and does not contact warehouse personnel.
 

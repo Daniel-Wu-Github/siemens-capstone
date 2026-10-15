@@ -21,6 +21,7 @@ data/
 *.key
 *.p12
 *.pfx
+*.pdf
 outputs/
 artifacts/
 models/
