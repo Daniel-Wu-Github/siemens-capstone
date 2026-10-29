@@ -1,0 +1,6 @@
+# Local, git-ignored. Siemens data lives in data/, which Git never tracks.
+bin_status_path = "data/bin_status.xlsx"
+minmax_path = "data/min_max.xlsx"
+bin_status_sheet = "BIN_STATUS_EXAMPLE"
+minmax_sheet = "Sheet3"
+output_dir = "outputs"
