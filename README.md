@@ -2,6 +2,45 @@
 
 This Texas A&M CSCE 482 capstone explores how to warn warehouse staff before materials in factory floor supermarkets run out. The intended outcome is fewer production interruptions caused by reactive replenishment. Siemens Digitalization and Data sponsors the project.
 
+## MVP Implementation Checkpoint (`code-checkmvp`)
+
+This section documents progress toward the Minimum Viable Product (MVP) for the instructional team review at tag `code-checkmvp`.
+
+### 1. What is Implemented So Far
+
+- **Phase 1: Supermarket Stock Monitoring & Reactive Alerts**:
+  - Continuous tracking of supermarket inventory positions against configured Min/Max tolerances.
+  - Multi-channel notification dispatching: automated emails (via SMTP with offline fallback to an `.eml` outbox), actionable Microsoft Teams cards, REST webhook integration, and shift summary digests.
+  - Interactive operator stock adjustments with event audit logging, alert acknowledgment, and delivery tracking.
+- **Phase 2: Proactive ML Depletion Forecasting Engine**:
+  - Two-stage hybrid quantile depletion engine estimating conservative $P_{10}$ (worst-case), $P_{50}$ (expected median), and $P_{90}$ days until a part breaches its minimum threshold.
+  - BOM & Schedule Demand Aggregation: joins planned sales orders and production schedules against BOMs and routings to calculate deterministic component requirements over 1-day, 3-day, 7-day, and 14-day horizons.
+  - Scrap contingency and production load multiplier adjustment ($0.25\times$ to $3.0\times$).
+  - Proactive Early Warning Notification Rule: triggers an alert when $P_{10} \le L_{\text{lead}} + X_{\text{buffer}}$, recommending the exact replenishment order quantity ($\text{Max} - \text{Stock}$) and reporting the 3-day breach probability.
+- **Full Interactive Web Application & Persistent Store**:
+  - Single-page dashboard (`index.html`) served locally at `http://127.0.0.1:8765` backed by Python SQLite persistence (`data/capstone.sqlite3`).
+  - Interactive operator controls: dispatch recommendations, record physical receipts (which atomically updates on-hand stock and resolves open alerts), and adjust what-if production parameters.
+- **Data Intake, Quality Control & Schema Validation**:
+  - Validated data contracts for `HISTORICAL_PROD_DATA`, `PLANNED_PROD_SCHEDULE`, `HISTORICAL_SM_REPLENISHMENTS`, `BIN_STATUS_EXAMPLE`, BOM, and tolerances.
+  - Automated join validation (e.g. 100% key match between planned line items and manufacturing routings).
+- **Automated Test Suite**:
+  - Comprehensive unit and integration test coverage across data schemas, feature extractors, quantile estimators, early warning alerts, and SQLite API endpoints (149 core unit/integration tests passing; zero temporal lookahead leakage).
+
+### 2. What is Not Yet Working / In Progress / Next Steps
+
+- **Live Production ERP/MES/WMS Connectors**:
+  - *Current state*: Intake operates on approved offline Excel extracts (`.xlsx`), CSV files, and synthetic verification fixtures.
+  - *Next step*: Direct, automated API integration with Siemens SAP ERP and MES systems is pending sponsor network authorization and credential provisioning.
+- **Real-Time IoT Sensor & Barcode Telemetry Streaming**:
+  - *Current state*: Stock readings rely on periodic snapshot imports and human-in-the-loop manual adjustments.
+  - *Next step*: Real-time ingestion from physical supermarket bin optical sensors or handheld RF barcode scanners is planned for Phase 3.
+- **Autonomous Transfer Order (TO) Creation in WMS**:
+  - *Current state*: System generates recommended replenishment quantities and prompts warehouse operators to acknowledge and dispatch.
+  - *Next step*: Direct programmatic creation of SAP Transfer Orders without manual human handoff will be implemented after sponsor UAT approval.
+- **Multi-Year Production Training on Uncurated Raw Logs**:
+  - *Current state*: Predictive estimators are benchmarked against fixed, reproducible synthetic holdout episodes.
+  - *Next step*: Transitioning to deep historical training across years of historical plant logs will commence once sponsor data cleaning definitions are formally signed off.
+
 ## Run the prototype
 
 The prototype has one frontend file, `index.html`, with all styling, JavaScript, and SVG charts embedded. A local Python server supplies the API and persists datasets, source rows, forecast runs, evaluations, policies, recommendations, and simulated receipts in SQLite.
