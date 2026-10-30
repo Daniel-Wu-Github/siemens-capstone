@@ -11,7 +11,7 @@ from .ingest import inspect_workbook
 from .schemas import generate_synthetic_manufacturing_fixtures
 from .features import aggregate_scheduled_bom_demand, compute_part_criticality, parse_iso_date
 from .ml_engine import QuantileDepletionEstimator, evaluate_depletion_models
-from .alerts import EarlyWarningNotificationEngine
+from .proactive_alerts import EarlyWarningNotificationEngine
 from dataclasses import asdict
 from datetime import timedelta
 

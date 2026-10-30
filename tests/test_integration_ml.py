@@ -12,7 +12,7 @@ from siemens_capstone.ml_engine import (
     QuantileDepletionEstimator,
     evaluate_depletion_models,
 )
-from siemens_capstone.alerts import EarlyWarningNotificationEngine
+from siemens_capstone.proactive_alerts import EarlyWarningNotificationEngine
 
 
 def test_end_to_end_ml_depletion_pipeline():

@@ -1,7 +1,7 @@
 """Unit tests for the proactive replenishment early warning notification engine."""
 from siemens_capstone.schemas import BinMaster
 from siemens_capstone.ml_engine import DepletionForecast
-from siemens_capstone.alerts import EarlyWarningNotificationEngine, ReplenishmentAlert
+from siemens_capstone.proactive_alerts import EarlyWarningNotificationEngine, ReplenishmentAlert
 
 
 def make_forecast(part_id: str, current_stock: float, min_stock: float, p10: float, p50: float) -> DepletionForecast:
