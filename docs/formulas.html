@@ -1,0 +1,35 @@
+<!doctype html><meta charset=utf-8><title>Phase 2 formulas</title>
+<style>
+body{margin:0;background:#fff;color:#111;font:20px/1.35 -apple-system,Helvetica,Arial,sans-serif;width:1400px}
+h1{margin:0;padding:24px 40px 8px;font-size:34px}
+.sub{padding:0 40px 16px;color:#555;font-size:18px}
+.g{display:grid;grid-template-columns:1fr 1fr;gap:20px;padding:0 40px 20px}
+.c{border:2px solid #111;border-radius:10px;padding:16px 20px}
+.c h2{margin:0 0 8px;font-size:22px}
+.f{font:600 21px/1.4 ui-monospace,Menlo,monospace;background:#f2f2f2;padding:8px 12px;border-radius:6px;margin:6px 0}
+.n{font:600 21px/1.5 ui-monospace,Menlo,monospace;color:#0a5}
+.s{font-size:17px;color:#444}
+table{border-collapse:collapse;width:100%;font-size:19px}td,th{border:1px solid #bbb;padding:5px 8px;text-align:left}
+.foot{padding:0 40px 24px;font-size:16px;color:#555}
+</style>
+<h1>Phase 2 predictive alert: four formulas</h1>
+<div class=sub>Example: available 35, min 20, max 90, history 8/day, schedule 10/day, lead 3 h</div>
+<div class=g>
+<div class=c><h2>1 · Demand per day</h2>
+<div class=f>demand = (history + schedule) / 2</div>
+<div class=s>If |schedule − history| / history &gt; 50% → demand = schedule</div>
+<div class=n>|10 − 8| / 8 = 25% ≤ 50%<br>(8 + 10) / 2 = <b>9 / day</b></div></div>
+<div class=c><h2>2 · Hours to minimum</h2>
+<div class=f>hours = max(0, available − min) / demand × 24</div>
+<div class=n>(35 − 20) / 9 × 24 = <b>40 h</b></div></div>
+<div class=c><h2>3 · Alert tier</h2>
+<table><tr><th>Tier<th>Rule<th>Example</tr>
+<tr><td>Alert<td>available ≤ min<td>35 ≤ 20? no</tr>
+<tr><td>Predicted<td>hours ≤ lead + 24<td>40 ≤ 27? no</tr>
+<tr><td>Watch<td>hours ≤ 72<td>40 ≤ 72? <b>yes</b></tr></table>
+<div class=s>Alert and Predicted send email/Teams. Watch is dashboard only.</div></div>
+<div class=c><h2>4 · Suggested quantity</h2>
+<div class=f>qty = ceil(max − (available − demand × lead / 24))</div>
+<div class=n>90 − (35 − 9 × 3 / 24) = 56.125<br>ceil → <b>57 units</b></div></div>
+</div>
+<div class=foot>Defaults: lead 3 h (placeholder), safety 24 h, watch 72 h, divergence 50%. Observed-depletion weight 0 (current stock only). Invented example numbers. Decided 2026-10-23, not yet sponsor confirmed.</div>

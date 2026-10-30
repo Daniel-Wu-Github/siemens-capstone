@@ -1,0 +1,132 @@
+"""Phase 2 Stock alerts page journeys in a real browser (temp SQLite, local outbox, no SMTP)."""
+from playwright.sync_api import sync_playwright, expect
+import pytest
+
+from qc_helpers import full_workbook, tolerance_bytes
+from test_api import running_server
+from test_phase2_store_api import BINS, PRODUCTION, TOLS, TRANSFERS
+
+LABELS = ['Stocked lead time (h)', 'Fab lead time (h)', 'Safety buffer (h)', 'History weight', 'Schedule weight',
+          'Observed weight', 'Divergence threshold (%)']
+
+
+def tile(page, name):
+    return page.locator('.stat').filter(has=page.get_by_text(name, exact=True)).locator('.stat-value')
+
+
+def open_page(p, base, tmp_path, viewport):
+    browser = p.chromium.launch()
+    page = browser.new_page(viewport=viewport)
+    errors = []
+    page.on('pageerror', lambda error: errors.append(str(error)))
+    wb = full_workbook(BINS, production=PRODUCTION, transfers=TRANSFERS)
+    ds = page.request.post(base + '/api/import?filename=s.xlsx', data=wb, headers={'Content-Type': 'application/octet-stream'}).json()['id']
+    page.request.post(base + f'/api/import?filename=t.xlsx&dataset={ds}', data=tolerance_bytes(TOLS), headers={'Content-Type': 'application/octet-stream'})
+    page.goto(base + '/?dataset=' + ds + '&view=alerts')
+    expect(page.get_by_role('heading', name='Parts, minimums, and available stock')).to_be_visible()
+    return browser, page, ds, errors
+
+
+@pytest.fixture
+def clean_env(tmp_path, monkeypatch):
+    for k in ('SMTP_HOST', 'TEAMS_WEBHOOK_URL', 'ALERT_WEBHOOK_URL', 'ALERT_EMAIL_TO', 'LEAD_HOURS_STOCKED', 'LEAD_HOURS_FAB', 'ALERT_SAFETY_HOURS'):
+        monkeypatch.delenv(k, raising=False)
+    monkeypatch.setenv('ALERT_OUTBOX', str(tmp_path / 'outbox'))
+
+
+@pytest.mark.browser
+def test_forecast_settings_card_predicted_tile_chip_filter_and_lead_select(tmp_path, clean_env):
+    with running_server(tmp_path) as base, sync_playwright() as p:
+        browser, page, ds, errors = open_page(p, base, tmp_path, {'width': 1440, 'height': 1000})
+        expect(page.get_by_text('Forecast settings', exact=True)).to_be_visible()
+        for label in LABELS: expect(page.get_by_label(label, exact=True)).to_be_visible()
+        expect(page.get_by_role('button', name='Save forecast settings')).to_be_visible()
+        expect(page.get_by_label('Stocked lead time (h)')).to_have_value('3')
+        expect(tile(page, 'Predicted')).to_have_text('1')
+        expect(page.locator('#stock-rows tr', has_text='PRED')).to_contain_text('Predicted')
+        for header in ('LEAD', 'DEMAND/DAY', 'HOURS TO MIN', 'SUGGEST'):
+            expect(page.locator('thead').get_by_text(header, exact=True)).to_be_visible()
+        options = page.locator('#stock-filter option').all_text_contents()
+        assert 'Predicted' in options
+        page.locator('#stock-filter').select_option(label='Predicted')
+        expect(page.locator('#stock-rows tr')).to_have_count(1)
+        page.locator('#stock-filter').select_option(label='All positions')
+        select = page.get_by_label('Lead class for PRED BP')
+        expect(select).to_be_visible()
+        assert set(select.locator('option').evaluate_all('o => o.map(x => x.value)')) >= {'stocked', 'fab'}
+        assert not errors
+        browser.close()
+
+
+@pytest.mark.browser
+def test_saving_lead_time_updates_predicted_tile_and_persists(tmp_path, clean_env):
+    with running_server(tmp_path) as base, sync_playwright() as p:
+        browser, page, ds, errors = open_page(p, base, tmp_path, {'width': 1440, 'height': 1000})
+        expect(tile(page, 'Predicted')).to_have_text('1')
+        page.get_by_label('Stocked lead time (h)', exact=True).fill('0')
+        page.get_by_role('button', name='Save forecast settings').click()
+        expect(tile(page, 'Predicted')).to_have_text('0')
+        page.get_by_label('Stocked lead time (h)', exact=True).fill('48')
+        page.get_by_role('button', name='Save forecast settings').click()
+        expect(tile(page, 'Predicted')).to_have_text('2')
+        page.reload()
+        expect(page.get_by_label('Stocked lead time (h)', exact=True)).to_have_value('48')
+        expect(tile(page, 'Predicted')).to_have_text('2')
+        saved = page.request.get(base + f'/api/stock?dataset={ds}').json()
+        assert saved['forecast']['settings']['lead_hours_stocked'] == 48.0
+        assert not errors
+        browser.close()
+
+
+@pytest.mark.browser
+def test_invalid_settings_show_an_inline_error_and_change_nothing(tmp_path, clean_env):
+    with running_server(tmp_path) as base, sync_playwright() as p:
+        browser, page, ds, errors = open_page(p, base, tmp_path, {'width': 1440, 'height': 1000})
+        page.get_by_label('Stocked lead time (h)', exact=True).evaluate('e => { e.removeAttribute("max"); e.removeAttribute("min"); }')
+        page.get_by_label('Stocked lead time (h)', exact=True).fill('9999')
+        page.get_by_role('button', name='Save forecast settings').click()
+        page.wait_for_timeout(500)
+        assert page.request.get(base + f'/api/stock?dataset={ds}').json()['forecast']['settings']['lead_hours_stocked'] == 3.0
+        assert page.locator('#content').get_by_text('720').count() >= 1 or page.locator('[role=alert], .error, #toast').count() >= 1
+        assert not errors
+        browser.close()
+
+
+@pytest.mark.browser
+def test_run_check_button_posts_and_reloads(tmp_path, clean_env):
+    with running_server(tmp_path) as base, sync_playwright() as p:
+        browser, page, ds, errors = open_page(p, base, tmp_path, {'width': 1440, 'height': 1000})
+        with page.expect_response('**/api/stock/check') as info:
+            page.get_by_role('button', name='Run check').click()
+        assert info.value.status == 200 and info.value.json()['checked_at']
+        expect(tile(page, 'Predicted')).to_have_text('1')
+        assert not errors
+        browser.close()
+
+
+@pytest.mark.browser
+def test_lead_class_select_posts_and_updates_row(tmp_path, clean_env):
+    with running_server(tmp_path) as base, sync_playwright() as p:
+        browser, page, ds, errors = open_page(p, base, tmp_path, {'width': 1440, 'height': 1000})
+        page.request.post(base + '/api/stock/settings', data='{"dataset":"%s","lead_hours_fab":48}' % ds, headers={'Content-Type': 'application/json'})
+        page.reload()
+        expect(tile(page, 'Predicted')).to_have_text('1')
+        with page.expect_response('**/api/stock/lead-class') as info:
+            page.get_by_label('Lead class for SAFE BS').select_option('fab')
+        assert info.value.status == 200
+        expect(tile(page, 'Predicted')).to_have_text('2')
+        expect(page.get_by_label('Lead class for SAFE BS')).to_have_value('fab')
+        assert not errors
+        browser.close()
+
+
+@pytest.mark.browser
+def test_stock_alerts_page_has_no_horizontal_scroll_at_390px(tmp_path, clean_env):
+    with running_server(tmp_path) as base, sync_playwright() as p:
+        browser, page, ds, errors = open_page(p, base, tmp_path, {'width': 390, 'height': 844})
+        expect(page.get_by_label('Stocked lead time (h)', exact=True)).to_be_visible()
+        assert page.evaluate('document.documentElement.scrollWidth <= innerWidth')
+        page.locator('#stock-filter').select_option(label='Predicted')
+        assert page.evaluate('document.documentElement.scrollWidth <= innerWidth')
+        assert not errors
+        browser.close()

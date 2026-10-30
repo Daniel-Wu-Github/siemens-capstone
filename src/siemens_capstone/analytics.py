@@ -10,7 +10,6 @@ import math
 import json
 from statistics import median
 
-from .engine import number
 from .ingest import excel_datetime, identifier
 
 ANALYSIS_VERSION = '2.1'
@@ -339,21 +338,3 @@ def analyze(records, date_system='1900', references=None):
                     'The rate averages over calendar days ending at the latest valid transfer, including quiet days and potentially partial endpoint days. No shift calendar is available.',
                     'Min/Max tolerances come from the supplied tolerance file; zero minimums and rows with min at or above max are flagged, not corrected. Days to minimum is a descriptive estimate, not a stockout prediction.',
                 ])
-
-
-def scenario(analysis, position_id, usage_multiplier, minimum_stock, lead_hours):
-    multiplier = number(usage_multiplier, 'Usage multiplier', 0.1, 5)
-    minimum = number(minimum_stock, 'Assumed minimum', 0, 1e6)
-    lead = number(lead_hours, 'Assumed warehouse lead', 0.1, 168)
-    row = next((r for r in analysis['inventory'] if r['id'] == position_id), None)
-    if row is None or not row['scenario_eligible'] or not row['target_quantity_per_day']:
-        raise ValueError('Choose a bin with valid count-unit stock and unambiguous positive transfer activity.')
-    rate = row['target_quantity_per_day'] * multiplier
-    hours = max(0, row['stock'] - minimum) / rate * 24
-    return dict(kind='assumption_based', position_id=position_id, material=row['material'], bin=row['bin'], unit=row['unit'],
-                snapshot_stock=row['stock'], target_quantity_per_day=row['target_quantity_per_day'],
-                assumed_consumption_per_day=rate, usage_multiplier=multiplier, minimum_stock=minimum,
-                lead_hours=lead, assumed_hours_to_minimum=hours, within_assumed_lead=hours <= lead, crossing_at=None,
-                assumptions=['Assumes confirmed transfer target quantities were actually received, and outbound use equals their average rate multiplied by the chosen factor.',
-                             'Assumes the undated snapshot is the starting balance, transfer quantities use the bin unit, and no new deliveries arrive.',
-                             'No actual depletion date, stockout probability, or production accuracy is established.'])

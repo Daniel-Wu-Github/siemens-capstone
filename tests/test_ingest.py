@@ -43,12 +43,10 @@ def test_import_deduplicated_by_checksum_persists_rows(tmp_path):
     first = store.import_workbook(workbook_bytes(), 'synthetic.xlsx')
     second = store.import_workbook(workbook_bytes(), 'synthetic.xlsx')
     assert first['id'] == second['id']
-    state = Store(tmp_path / 'test.sqlite3').state(first['id'])
-    assert state['dataset']['kind'] == 'workbook'
-    assert state['quality']['total_rows'] == 6
-    assert state['materials'] == []
+    sources = Store(tmp_path / 'test.sqlite3').sources(first['id'])
+    assert sources['dataset']['kind'] == 'workbook'
+    assert sources['quality']['total_rows'] == 6
     assert store.record_count(first['id']) == 6
-    with pytest.raises(ValueError): store.evaluate(first['id'])
 
 
 def test_missing_sheets_and_invalid_file_do_not_make_a_dataset(tmp_path):

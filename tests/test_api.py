@@ -28,31 +28,35 @@ def request(base, path, body=None, headers=None):
         return response.code, response.read()
 
 
-def test_http_roundtrip_persistence_and_export(tmp_path):
+def test_http_health_index_and_empty_workspace(tmp_path):
     with running_server(tmp_path) as base:
         assert request(base, '/api/health')[0] == 200
         assert b'<!DOCTYPE html>' in request(base, '/')[1]
-        status, body = request(base, '/api/state?dataset=demo')
-        state = json.loads(body); assert status == 200 and state['materials']
-        assert request(base, '/api/scenario', {'dataset': 'demo', 'factor': 1.5})[0] == 200
-        assert json.loads(request(base, '/api/state?dataset=demo')[1])['dataset']['demand_factor'] == 1.5
-        assert json.loads(request(base, '/api/export?dataset=demo')[1])['runs']
+        status, body = request(base, '/api/datasets')
+        assert status == 200 and json.loads(body) == []
+
+
+def test_retired_legacy_routes_are_gone(tmp_path):
+    with running_server(tmp_path) as base:
+        for path in ('/api/state', '/api/export'):
+            assert request(base, path)[0] == 404
+        for path in ('/api/forecast', '/api/evaluate', '/api/scenario', '/api/policy', '/api/alert', '/api/workbook-scenario'):
+            assert request(base, path, {'dataset': 'x'})[0] == 404
 
 
 def test_http_invalid_inputs_and_cross_origin_rejected(tmp_path):
     with running_server(tmp_path) as base:
-        assert request(base, '/api/scenario', {'dataset': 'demo', 'factor': -1})[0] == 400
-        assert request(base, '/api/forecast', {'dataset': 'demo'}, {'Origin': 'https://example.com'})[0] == 403
-        assert request(base, '/api/forecast', {'dataset': 'missing'})[0] == 400
+        assert request(base, '/api/stock/check', {'dataset': 'x'}, {'Origin': 'https://example.com'})[0] == 403
+        assert request(base, '/api/stock/check', {'dataset': 'missing'})[0] == 400
         assert request(base, '/api/no-such-route')[0] == 404
         assert request(base, '/../../.git/config')[0] == 404
 
 
-def test_workbook_insights_cannot_be_confused_with_synthetic_forecasts(tmp_path):
+def test_unknown_dataset_is_a_client_error(tmp_path):
     with running_server(tmp_path) as base:
-        status, body = request(base, '/api/insights?dataset=demo')
-        assert status == 400
-        assert 'workbook' in json.loads(body)['error'].lower()
+        for path in ('/api/insights?dataset=demo', '/api/sources?dataset=demo', '/api/stock?dataset=demo'):
+            status, body = request(base, path)
+            assert status == 400 and 'not found' in json.loads(body)['error'].lower()
 
 
 def post_bytes(base, path, content):

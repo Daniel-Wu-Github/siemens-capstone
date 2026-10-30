@@ -1,0 +1,45 @@
+<!doctype html><meta charset=utf-8><title>Shell mock</title>
+<style>
+*{box-sizing:border-box}body{margin:0;font:14px/1.4 -apple-system,Helvetica,Arial,sans-serif;color:#111;background:#fff;width:1280px;height:760px;overflow:hidden}
+.banner{background:#fff3cd;border-bottom:1px solid #d9c27a;padding:6px 16px;font-size:12px}
+.app{display:flex;height:100%}
+aside{width:230px;border-right:1px solid #ccc;padding:16px;background:#f7f7f7;flex:none}
+.brand{font-weight:700;letter-spacing:.08em;margin-bottom:18px}
+aside a{display:block;padding:8px 10px;margin:2px 0;border-radius:4px;color:#333}
+aside a.on{background:#fff;border:1px solid #bbb;font-weight:700}
+aside .g{margin:18px 0 4px;font-size:11px;color:#777;text-transform:uppercase;letter-spacing:.06em}
+aside a.l{color:#888;font-size:13px}
+main{flex:1;padding:18px 24px;overflow:hidden}
+.top{display:flex;border-bottom:1px solid #ccc;padding:0 24px;align-items:center;gap:4px;height:48px}
+.top .brand{margin:0 24px 0 0}.top a{padding:13px 14px;color:#333}.top a.on{border-bottom:3px solid #1f4e79;font-weight:700}.top .sp{flex:1}
+h1{font-size:22px;margin:0 0 2px}.sub{color:#666;margin-bottom:14px}
+.stats{display:flex;gap:12px;margin-bottom:14px}.stat{border:1px solid #ccc;padding:8px 14px;flex:1}.stat b{font-size:24px;display:block}.stat span{color:#666;font-size:12px}
+table{border-collapse:collapse;width:100%;font-size:13px}th,td{border-bottom:1px solid #ddd;padding:6px 8px;text-align:left}th{color:#555;font-weight:600;background:#fafafa}
+.t{display:inline-block;padding:1px 8px;border:1px solid #999;font-size:11px}.pr{border-color:#b00;color:#b00}.w{border-color:#a60;color:#a60}
+.row{display:flex;gap:16px}.col{flex:1}.panel{border:1px solid #ccc;padding:10px 12px;margin-bottom:12px}.panel h3{margin:0 0 6px;font-size:13px;text-transform:uppercase;letter-spacing:.05em;color:#555}
+.tag{font-size:11px;color:#777}
+.drawer{position:absolute;right:0;top:0;width:300px;height:100%;background:#fff;border-left:1px solid #999;padding:16px;box-shadow:none}
+</style>
+<body>
+<script>
+const v=new URLSearchParams(location.search).get('v');
+const rows=`<tr><td>Part A</td><td>Bin 1</td><td>35</td><td>20</td><td>9</td><td>40 h</td><td><span class="t w">Watch</span></td></tr>
+<tr><td>Part B</td><td>Bin 2</td><td>28</td><td>20</td><td>9</td><td>21 h</td><td><span class="t pr">Predicted</span></td></tr>
+<tr><td>Part C</td><td>Bin 3</td><td>12</td><td>10</td><td>4</td><td>12 h</td><td><span class="t pr">Predicted</span></td></tr>
+<tr><td>Part D</td><td>Bin 4</td><td>90</td><td>30</td><td>12</td><td>120 h</td><td>OK</td></tr>`;
+const page=`<h1>Predicted alerts</h1><div class=sub>Phase 2: bins forecast to reach minimum within lead time + 24 h</div>
+<div class=stats><div class=stat><b>2</b><span>Predicted (email)</span></div><div class=stat><b>1</b><span>Watch (72 h)</span></div><div class=stat><b>1,364</b><span>with a demand rate</span></div><div class=stat><b>953</b><span>no rate</span></div></div>
+<div class=row><div class=col style="flex:2"><table><tr><th>Part<th>Bin<th>Available<th>Min<th>Demand/day<th>Hours to min<th>Tier</tr>${rows}</table></div>
+<div class=col><div class=panel><h3>Part detail</h3>Part B, Bin 2<br>history 8 · schedule 10 · demand 9<br>(28 − 20) / 9 × 24 = 21 h<br>Suggested qty 70</div>
+<div class=panel><h3>Settings</h3>Lead 3 h · Safety 24 h · Watch 72 h<br>Weights history 1 · schedule 1 · observed 0</div></div></div>`;
+const legacy=['Overview','Materials &amp; alerts','Model evaluation','Workbook insights'];
+let h='';
+if(v==='a'){h=`<div class=banner>Prototype on supplied sample data</div><div class=app><aside><div class=brand>STOCK ALERTS LAB</div>
+<a>1 · Stock alerts <small class=tag>Phase 1</small></a><a class=on>2 · Predicted alerts <small class=tag>Phase 2</small></a><a>3 · Replenishment insights</a>
+<div class=g>Setup</div><a>Data sources</a><a>Settings</a>
+<div class=g>Legacy · demo only</div>${legacy.map(x=>`<a class=l>${x}</a>`).join('')}</aside><main>${page}</main></div>`}
+if(v==='b'){h=`<div class=banner>Prototype on supplied sample data</div><div class=top><div class=brand>STOCK ALERTS LAB</div><a>Stock alerts</a><a class=on>Predicted alerts</a><a>Replenishment insights</a><div class=sp></div><a>Data ▾</a><a>Settings ⚙</a><a class=tag>Legacy ▾</a></div><main>${page}</main>`}
+if(v==='c'){h=`<div class=banner>Prototype on supplied sample data</div><div class=app><aside><div class=brand>STOCK ALERTS LAB</div>
+<a>Stock alerts</a><a class=on>Predicted alerts</a><a>Replenishment insights</a><div class=g>&nbsp;</div><a class=l>Legacy demos (4) →</a></aside><main style="position:relative">${page}<div class=drawer><b>Settings and data</b><p>Lead time, safety buffer, watch window, weights.</p><p>Data sources: upload bin status, tolerances, BOM, schedule.</p><p class=tag>Opens from a gear in each page header</p></div></main></div>`}
+document.body.innerHTML=h;
+</script>

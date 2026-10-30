@@ -1,0 +1,48 @@
+# Removed from tests/test_analytics.py (what-if scenario assertions)
+
+    simulation = scenario(result, row['id'], 2, 0, 8)
+    assert simulation['assumed_hours_to_minimum'] == 24
+    assert simulation['kind'] == 'assumption_based'
+    assert simulation['crossing_at'] is None
+    assert simulation['assumptions']
+
+
+    with pytest.raises(ValueError): scenario(result, row['id'], 1, 0, 8)
+    row = next(r for r in result['inventory'] if r['material'] == 'PART-B')
+    with pytest.raises(ValueError): scenario(result, row['id'], 1, 0, 8)
+
+
+    saved = scenario(result, row['id'], 1, 0, 8)
+    assert saved['assumed_hours_to_minimum'] > 0
+
+def test_scenario_inputs_and_unsupported_units_rejected():
+    data = records()
+    data['BIN_STATUS_EXAMPLE'][0]['Base Unit of Measure'] = 'KG'
+    result = analyze(data, '1900')
+    row = next(r for r in result['inventory'] if r['material'] == 'PART-A')
+    with pytest.raises(ValueError): scenario(result, row['id'], 1, 0, 8)
+    result = analyze(records(), '1900')
+    row = next(r for r in result['inventory'] if r['material'] == 'PART-A')
+    with pytest.raises(ValueError): scenario(result, row['id'], -1, 0, 8)
+
+def test_analysis_and_what_if_scenarios_persist_without_altering_source(tmp_path):
+    from io import BytesIO
+    from openpyxl import load_workbook
+    from test_ingest import workbook_bytes
+    wb = load_workbook(BytesIO(workbook_bytes()))
+    ws = wb['HISTORICAL_SM_REPLENISHMENTS']
+    ws['E2'] = 60
+    ws['H2'] = ws['F2'].value
+    buf = BytesIO(); wb.save(buf)
+    path = tmp_path / 'insights.sqlite3'
+    store = Store(path)
+    ds = store.import_workbook(buf.getvalue(), 'synthetic.xlsx')
+    insights = store.insights(ds['id'])
+    row = insights['inventory'][0]
+    result = store.workbook_scenario(ds['id'], row['id'], 1, 0, 8)
+    assert result['assumed_hours_to_minimum'] == 4
+    reopened = Store(path)
+    assert reopened.insights(ds['id'])['scenarios'][0]['id'] == result['id']
+    assert reopened.record_count(ds['id']) == 6
+    assert reopened.state(ds['id'])['materials'] == []
+    assert reopened.export(ds['id'])['insights']['scenarios'][0]['kind'] == 'assumption_based'

@@ -2,7 +2,7 @@ from copy import deepcopy
 
 import pytest
 
-from siemens_capstone.analytics import analyze, scenario
+from siemens_capstone.analytics import analyze
 from siemens_capstone.store import Store
 
 
@@ -57,11 +57,6 @@ def test_proxy_uses_transfer_targets_and_never_claims_consumption():
     assert row['stock_to_target_days'] == 2
     assert result['forecast_validated'] is False
     assert result['snapshot_as_of'] is None
-    simulation = scenario(result, row['id'], 2, 0, 8)
-    assert simulation['assumed_hours_to_minimum'] == 24
-    assert simulation['kind'] == 'assumption_based'
-    assert simulation['crossing_at'] is None
-    assert simulation['assumptions']
 
 
 def test_missing_and_ambiguous_inputs_do_not_become_zero_demand():
@@ -71,20 +66,6 @@ def test_missing_and_ambiguous_inputs_do_not_become_zero_demand():
     row = next(r for r in result['inventory'] if r['material'] == 'PART-A')
     assert row['stock'] is None
     assert row['stock_to_target_days'] is None
-    with pytest.raises(ValueError): scenario(result, row['id'], 1, 0, 8)
-    row = next(r for r in result['inventory'] if r['material'] == 'PART-B')
-    with pytest.raises(ValueError): scenario(result, row['id'], 1, 0, 8)
-
-
-def test_scenario_inputs_and_unsupported_units_rejected():
-    data = records()
-    data['BIN_STATUS_EXAMPLE'][0]['Base Unit of Measure'] = 'KG'
-    result = analyze(data, '1900')
-    row = next(r for r in result['inventory'] if r['material'] == 'PART-A')
-    with pytest.raises(ValueError): scenario(result, row['id'], 1, 0, 8)
-    result = analyze(records(), '1900')
-    row = next(r for r in result['inventory'] if r['material'] == 'PART-A')
-    with pytest.raises(ValueError): scenario(result, row['id'], -1, 0, 8)
 
 
 def test_schedule_and_production_do_not_get_joined_into_material_use():
@@ -94,29 +75,6 @@ def test_schedule_and_production_do_not_get_joined_into_material_use():
     changed = analyze(data, '1900')
     assert original['inventory'] == changed['inventory']
     assert changed['schedule']['source_rows'] == 300
-
-
-def test_analysis_and_what_if_scenarios_persist_without_altering_source(tmp_path):
-    from io import BytesIO
-    from openpyxl import load_workbook
-    from test_ingest import workbook_bytes
-    wb = load_workbook(BytesIO(workbook_bytes()))
-    ws = wb['HISTORICAL_SM_REPLENISHMENTS']
-    ws['E2'] = 60
-    ws['H2'] = ws['F2'].value
-    buf = BytesIO(); wb.save(buf)
-    path = tmp_path / 'insights.sqlite3'
-    store = Store(path)
-    ds = store.import_workbook(buf.getvalue(), 'synthetic.xlsx')
-    insights = store.insights(ds['id'])
-    row = insights['inventory'][0]
-    result = store.workbook_scenario(ds['id'], row['id'], 1, 0, 8)
-    assert result['assumed_hours_to_minimum'] == 4
-    reopened = Store(path)
-    assert reopened.insights(ds['id'])['scenarios'][0]['id'] == result['id']
-    assert reopened.record_count(ds['id']) == 6
-    assert reopened.state(ds['id'])['materials'] == []
-    assert reopened.export(ds['id'])['insights']['scenarios'][0]['kind'] == 'assumption_based'
 
 
 def test_duplicate_stock_is_not_added_twice_and_missing_identifiers_reported():
@@ -152,8 +110,6 @@ def test_small_positive_target_rate_remains_scenario_eligible():
     row = next(r for r in result['inventory'] if r['material'] == 'PART-A')
     assert row['scenario_eligible']
     assert row['target_quantity_per_day'] > 0
-    saved = scenario(result, row['id'], 1, 0, 8)
-    assert saved['assumed_hours_to_minimum'] > 0
 
 
 def reference_records():

@@ -20,7 +20,7 @@ def handler_for(store):
             traceback.print_exc(file=sys.stderr)
             return self.respond(500, {'error': 'The operation could not be completed. Existing saved data was preserved. See the server log.'})
 
-        def respond(self, status, value, content_type='application/json; charset=utf-8', download=False):
+        def respond(self, status, value, content_type='application/json; charset=utf-8'):
             body = value if isinstance(value, bytes) else json.dumps(value, allow_nan=False).encode()
             self.send_response(status)
             self.send_header('Content-Type', content_type)
@@ -29,7 +29,6 @@ def handler_for(store):
             self.send_header('X-Content-Type-Options', 'nosniff')
             self.send_header('Referrer-Policy', 'no-referrer')
             self.send_header('Content-Security-Policy', "default-src 'self'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; img-src 'self' data:; connect-src 'self'; frame-ancestors 'none'; base-uri 'none'; form-action 'self'")
-            if download: self.send_header('Content-Disposition', 'attachment; filename="replenishment-report.json"')
             self.end_headers()
             self.wfile.write(body)
 
@@ -39,16 +38,15 @@ def handler_for(store):
         def do_GET(self):
             if not self.valid_host(): return self.respond(403, {'error': 'Use the local server address.'})
             url = urlsplit(self.path)
-            dataset = parse_qs(url.query).get('dataset', ['demo'])[0]
+            dataset = parse_qs(url.query).get('dataset', [''])[0]
             try:
                 if url.path in ('/', '/index.html'):
                     return self.respond(200, HTML.read_bytes(), 'text/html; charset=utf-8')
                 if url.path == '/api/health': return self.respond(200, {'status': 'ok', 'storage': 'sqlite', 'mode': 'local prototype'})
                 if url.path == '/api/datasets': return self.respond(200, store.datasets())
-                if url.path == '/api/state': return self.respond(200, store.state(dataset))
+                if url.path == '/api/sources': return self.respond(200, store.sources(dataset))
                 if url.path == '/api/insights': return self.respond(200, store.insights(dataset))
                 if url.path == '/api/stock': return self.respond(200, store.stock_view(dataset))
-                if url.path == '/api/export': return self.respond(200, store.export(dataset), download=True)
                 return self.respond(404, {'error': 'Not found.'})
             except ValueError as exc:
                 return self.respond(400, {'error': str(exc)})
@@ -79,17 +77,14 @@ def handler_for(store):
                     return self.respond(415, {'error': 'Use application/json.'})
                 body = json.loads(self.rfile.read(size))
                 if not isinstance(body, dict): raise ValueError('Expected a JSON object.')
-                dataset = body.get('dataset', 'demo')
-                if url.path == '/api/forecast': result = store.forecast(dataset)
-                elif url.path == '/api/evaluate': result = store.evaluate(dataset)
-                elif url.path == '/api/scenario': result = store.scenario(dataset, body.get('factor'))
-                elif url.path == '/api/policy': result = store.update_policy(dataset, body.get('material'), body.get('policy', {}))
-                elif url.path == '/api/alert': result = store.alert_action(body.get('id'), body.get('action'), body.get('quantity'))
-                elif url.path == '/api/stock/available': result = store.set_available(dataset, body.get('position'), body.get('available'))
+                dataset = body.get('dataset')
+                if url.path == '/api/stock/available': result = store.set_available(dataset, body.get('position'), body.get('available'))
+                elif url.path == '/api/stock/settings': result = store.update_stock_settings(dataset, {k: v for k, v in body.items() if k != 'dataset'})
+                elif url.path == '/api/stock/lead-class': result = store.set_lead_class(dataset, body.get('position'), body.get('lead_class'))
+                elif url.path == '/api/stock/check': result = store.run_stock_check(dataset)
                 elif url.path == '/api/stock/reset': result = store.reset_stock(dataset)
                 elif url.path == '/api/stock/digest': result = store.stock_digest(dataset)
                 elif url.path == '/api/stock/ack': result = store.acknowledge_stock_alert(body.get('id'))
-                elif url.path == '/api/workbook-scenario': result = store.workbook_scenario(dataset, body.get('position_id'), body.get('usage_multiplier'), body.get('minimum_stock'), body.get('lead_hours'))
                 else: return self.respond(404, {'error': 'Not found.'})
                 return self.respond(200, result if result is not None else {'ok': True})
             except (ValueError, TypeError, KeyError, AttributeError) as exc:

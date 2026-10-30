@@ -1,0 +1,27 @@
+def test_http_roundtrip_persistence_and_export(tmp_path):
+    with running_server(tmp_path) as base:
+        assert request(base, '/api/health')[0] == 200
+        assert b'<!DOCTYPE html>' in request(base, '/')[1]
+        status, body = request(base, '/api/state?dataset=demo')
+        state = json.loads(body); assert status == 200 and state['materials']
+        assert request(base, '/api/scenario', {'dataset': 'demo', 'factor': 1.5})[0] == 200
+        assert json.loads(request(base, '/api/state?dataset=demo')[1])['dataset']['demand_factor'] == 1.5
+        assert json.loads(request(base, '/api/export?dataset=demo')[1])['runs']
+
+
+def test_http_invalid_inputs_and_cross_origin_rejected(tmp_path):
+    with running_server(tmp_path) as base:
+        assert request(base, '/api/scenario', {'dataset': 'demo', 'factor': -1})[0] == 400
+        assert request(base, '/api/forecast', {'dataset': 'demo'}, {'Origin': 'https://example.com'})[0] == 403
+        assert request(base, '/api/forecast', {'dataset': 'missing'})[0] == 400
+        assert request(base, '/api/no-such-route')[0] == 404
+        assert request(base, '/../../.git/config')[0] == 404
+
+
+def test_workbook_insights_cannot_be_confused_with_synthetic_forecasts(tmp_path):
+    with running_server(tmp_path) as base:
+        status, body = request(base, '/api/insights?dataset=demo')
+        assert status == 400
+        assert 'workbook' in json.loads(body)['error'].lower()
+
+

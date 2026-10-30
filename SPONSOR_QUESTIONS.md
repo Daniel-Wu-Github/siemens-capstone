@@ -27,3 +27,9 @@ Last updated: 2026-10-09.
 ## Course logistics
 
 12. **UAT tester count.** Can the minimum UAT tester count be waived or met with Siemens staff plus team members?
+
+## Predicted alerts (Phase 2)
+
+13. **Fab lead time.** What is the lead time for an item built in fab, compared with a stocked item? Both default to 3 h for now.
+14. **Divergence threshold.** When the production schedule and transfer history disagree by more than a set percentage, the schedule wins (default 50%). Is that the right threshold?
+15. **Safety buffer.** Should a predicted alert fire a fixed number of hours before the lead time runs out (default 0 h)?

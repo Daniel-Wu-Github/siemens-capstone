@@ -24,6 +24,36 @@ ALERT_EMAIL_TO=you@gmail.com .venv/bin/python server.py
 
 Failed deliveries are reported in the page and the activity log with the error text (configured passwords and webhook URLs are masked), never raised. Failed deliveries are not retried automatically; use **Send digest** to resend. Unexpected server errors return a JSON 500 and print a traceback to the server's standard error.
 
+## Pages
+
+**Stock alerts** is Phase 1 only. **Predicted alerts** lists the Phase 2 forecast with a hours-to-minimum bar per row and, for the selected row, a projection chart and the step-by-step calculation (the former Part forecast page and its what-if controls were retired). **Settings** edits the lead times, safety buffer, weights and divergence threshold. **Data sources** imports the workbook and reference files.
+
 ## API
 
-`GET /api/stock?dataset=`, `POST /api/stock/available {dataset, position, available|null}`, `POST /api/stock/reset {dataset}`, `POST /api/stock/digest {dataset}`, `POST /api/stock/ack {id}`.
+`GET /api/datasets`, `GET /api/sources?dataset=`, `GET /api/stock?dataset=`, `POST /api/stock/available {dataset, position, available|null}`, `POST /api/stock/reset {dataset}`, `POST /api/stock/digest {dataset}`, `POST /api/stock/ack {id}`.
+
+## Phase 2 predicted alerts
+
+Phase 2 warns before the breach. For each position the app projects when the bin reaches its minimum and compares that with the lead time to restock it. A position whose projected hours to minimum are at or below `lead hours + safety buffer` becomes **Predicted** and raises an alert of kind `predicted` (Phase 1 alerts have kind `below_min`). Positions with no tolerance or no stock reading are not forecast.
+
+**Settings** (per dataset, Forecast settings card; defaults below):
+
+| Setting | Default | Range | Meaning |
+| --- | --- | --- | --- |
+| `lead_hours_stocked` | 3 | 0-720 | Lead time for a stocked item |
+| `lead_hours_fab` | 3 | 0-720 | Lead time for an item built in fab (sponsor to confirm; see `docs/decisions.md`) |
+| `safety_hours` | 0 | 0-168 | Extra buffer added to the lead time |
+| `weights.history`, `weights.schedule`, `weights.observed` | 1 each | 0-10 | Weight of each demand input; 0 ignores it |
+| `divergence_pct` | 50 | 0-1000 | When the schedule rate differs from the history rate by more than this percentage, history is dropped so the schedule outweighs it |
+
+Each position has a lead class (`stocked` or `fab`, default `stocked`) chosen in the table; it selects which lead time applies.
+
+**Formulas.** Demand per day is the weighted mean of the available inputs: history (transfer cadence, `replen_qty_per_day`), schedule (planned quantity in the next 30 days / 30, only when the BOM maps the part to exactly one position), and observed (depletion between dated snapshots). Inputs that are missing, negative, or weighted 0 are skipped. `hours_to_min = max(0, available - min) / demand_per_day * 24`. `suggested_qty = ceil(max - (available - demand_per_day * lead_hours / 24))`, floored at 0, when a maximum is set. With no demand rate the forecast is `no_rate` and the status stays OK.
+
+**Lifecycle.** At most one open alert per position. A predicted alert whose bin then reaches its minimum is **escalated**: the same alert becomes `below_min`, is reopened (even if acknowledged), and is notified again. A below-minimum alert whose stock rises above the minimum but is still within lead time becomes `predicted` without a new notification. A predicted alert that stops being predicted resolves as `forecast cleared`. Email subjects read `[Stock alert] <material> at <supermarket> <bin> predicted to reach minimum in X h`; Teams cards gain a Predicted section.
+
+**API.** `POST /api/stock/settings {dataset, ...changes}` (partial; `weights` may be partial), `POST /api/stock/lead-class {dataset, position, lead_class}` (`null` clears the override), `POST /api/stock/check {dataset}`. `GET /api/stock` adds `forecast: {settings, summary: {predicted, below_min, no_rate, ok}}` and per-position `lead_class`, `lead_hours`, `demand_per_day`, `demand_basis`, `demand_dropped`, `hours_to_min`, `suggested_qty`, `forecast`.
+
+**Environment.** `LEAD_HOURS_STOCKED`, `LEAD_HOURS_FAB`, `ALERT_SAFETY_HOURS` set the defaults for datasets without saved settings (an invalid value stops the server at startup). `python server.py --check-minutes N` re-checks every workbook every N minutes (0 = off) so predicted alerts fire without opening the page; the **Run check** button does the same on demand.
+
+The forecast is an estimate from recorded transfer quantities, not measured consumption; it has not been validated against real stockouts.

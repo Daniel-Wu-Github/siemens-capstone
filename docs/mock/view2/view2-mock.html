@@ -1,0 +1,141 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>View 2 mock - Replenishment insights</title>
+<style>
+:root{--ink:#0e1a24;--ink-2:#3d4b58;--muted:#667585;--faint:#98a4b0;--bg:#f2f4f7;--surface:#fff;--sunken:#f7f8fa;--line:#e2e6eb;--line-2:#eef1f4;--accent:#00757a;--accent-strong:#005a5f;--accent-soft:#e3f3f2;--red:#c4320a;--red-soft:#fef1ec;--amber:#a15c07;--amber-soft:#fff6e5;--green:#067647;--green-soft:#ecfdf3;--blue:#2f5f98;--radius:12px;--shadow:0 1px 2px rgba(16,24,40,.05),0 1px 3px rgba(16,24,40,.06);--font:"Inter","SF Pro Text",-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,"Helvetica Neue",sans-serif}
+*{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--ink);font:13px/1.45 var(--font)}
+.app{display:grid;grid-template-columns:232px 1fr;min-height:100vh}
+aside{background:#0e1a24;color:#cfd8e0;padding:20px 14px;display:flex;flex-direction:column;gap:6px}
+aside .brand{font-weight:650;color:#fff;font-size:14px;padding:0 10px 14px}aside .brand small{display:block;color:#8aa0b2;font-weight:400;font-size:11px}
+aside button{all:unset;display:flex;gap:10px;align-items:center;padding:9px 10px;border-radius:8px;cursor:default;color:#cfd8e0;font-size:13px}
+aside button[aria-current=page]{background:#16303a;color:#fff;box-shadow:inset 3px 0 0 #2ec4b6}
+aside .legacy{margin-top:16px;padding:8px 10px;color:#7d92a3;font-size:10px;letter-spacing:.08em;text-transform:uppercase}
+aside .legacy-item{padding:7px 10px;color:#7d92a3;font-size:12px;display:flex;justify-content:space-between}
+aside .legacy-item span{border:1px solid #3a4f5f;border-radius:4px;padding:0 5px;font-size:9px}
+main{min-width:0}.topbar{height:52px;background:#fff;border-bottom:1px solid var(--line);display:flex;align-items:center;padding:0 28px;color:var(--muted)}
+.topbar b{color:var(--ink);margin-left:6px}
+.workspace{padding:22px 28px 40px;max-width:1500px}
+.notice{display:flex;gap:10px;align-items:center;background:var(--amber-soft);border:1px solid #f1d9a8;color:var(--amber);padding:9px 14px;border-radius:9px;margin-bottom:18px;font-size:12px}
+.tag{background:var(--amber);color:#fff;border-radius:4px;padding:1px 6px;font-size:10px;font-weight:650;letter-spacing:.05em}
+.eyebrow{font-size:10px;letter-spacing:.1em;color:var(--accent);font-weight:650}h1{font-size:22px;margin:4px 0 4px}.sub{color:var(--muted);max-width:760px;margin:0 0 18px}
+.stats{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:14px;margin-bottom:20px}
+.stat{background:var(--surface);border:1px solid var(--line);border-radius:var(--radius);padding:14px 16px;box-shadow:var(--shadow)}
+.stat-label{font-size:10px;letter-spacing:.07em;color:var(--muted);text-transform:uppercase}.stat-value{font-size:26px;font-weight:650;margin:3px 0}.stat small{color:var(--muted);font-size:11px}
+.red{color:var(--red)}.amber{color:var(--amber)}.teal{color:var(--accent)}
+.card{background:var(--surface);border:1px solid var(--line);border-radius:var(--radius);box-shadow:var(--shadow);margin-bottom:20px}
+.card-head{display:flex;justify-content:space-between;align-items:flex-start;gap:12px;padding:16px 20px;border-bottom:1px solid var(--line-2);flex-wrap:wrap}
+.card-head h2{font-size:15px;margin:0}.card-head p{margin:3px 0 0;color:var(--muted);font-size:12px;max-width:640px}
+.card-body{padding:16px 20px}
+.table-wrap{overflow-x:auto}table{border-collapse:collapse;width:100%;min-width:760px}
+th{font-size:10px;letter-spacing:.06em;color:var(--muted);text-align:left;padding:9px 14px;border-bottom:1px solid var(--line);background:var(--sunken);white-space:nowrap}
+td{padding:11px 14px;border-bottom:1px solid var(--line-2);white-space:nowrap}td small{display:block;color:var(--muted);font-size:11px}
+tr.sel td{background:var(--accent-soft)}
+.chip{display:inline-block;border-radius:999px;padding:2px 9px;font-size:11px;font-weight:600}
+.chip.alert{background:var(--red-soft);color:var(--red)}.chip.watch{background:var(--amber-soft);color:var(--amber)}.chip.ok{background:var(--green-soft);color:var(--green)}.chip.src{background:#eef3f9;color:var(--blue);font-weight:500}
+.lenses{display:flex;gap:8px;flex-wrap:wrap;padding:14px 20px 0}
+.lens{border:1px solid var(--line);border-radius:999px;padding:5px 12px;font-size:12px;background:#fff;color:var(--ink-2)}.lens.on{background:var(--accent);border-color:var(--accent);color:#fff}
+.ctl{display:flex;gap:10px;align-items:end}.ctl label{display:block;color:var(--muted);font-size:11px;margin-bottom:4px}.ctl input{width:84px;padding:7px 9px;border:1px solid var(--line);border-radius:7px;font-size:12px}
+.btn{border:1px solid var(--line);background:#fff;border-radius:8px;padding:8px 12px;font-size:12px;color:var(--ink)}.btn.primary{background:var(--accent);color:#fff;border-color:var(--accent)}
+.bar{position:relative;height:8px;width:120px;background:var(--line-2);border-radius:4px}.bar i{position:absolute;left:0;top:0;bottom:0;border-radius:4px;background:var(--accent)}.bar i.r{background:var(--red)}.bar i.a{background:#d9962b}.bar u{position:absolute;top:-3px;bottom:-3px;width:2px;background:var(--ink)}
+.detail{display:grid;grid-template-columns:1.25fr 1fr;gap:20px}
+.evidence{background:var(--accent-soft);border:1px solid #bfe3e0;border-radius:9px;padding:13px 15px;margin-top:14px;font-size:12.5px}
+.note{font-size:11px;color:var(--muted);margin-top:12px;line-height:1.6}
+.cap{font-size:11px;color:var(--muted);margin:0 0 6px}svg text{font:10px var(--font);fill:var(--muted)}
+@media(max-width:1100px){.stats{grid-template-columns:repeat(3,minmax(0,1fr))}.detail{grid-template-columns:1fr}}
+@media(max-width:720px){.app{grid-template-columns:1fr}aside{flex-direction:row;overflow-x:auto;padding:10px 12px;align-items:center}aside .brand,aside .legacy,aside .legacy-item{display:none}aside button{white-space:nowrap}
+.workspace{padding:16px}.topbar{padding:0 16px}.stats{grid-template-columns:1fr 1fr}.card-head,.card-body{padding:14px}.lenses{padding:12px 14px 0}}
+</style></head><body>
+<div class="app">
+<aside aria-label="Main navigation">
+  <div class="brand">Siemens capstone<small>Proactive material replenishment</small></div>
+  <button>Stock alerts <span style="margin-left:auto;color:#7d92a3;font-size:10px">Phase 1</span></button>
+  <button>Predicted alerts <span style="margin-left:auto;color:#7d92a3;font-size:10px">Phase 2</span></button>
+  <button aria-current="page">Replenishment insights <span style="margin-left:auto;color:#7d92a3;font-size:10px">View 2</span></button>
+  <div class="legacy">Legacy &middot; demo only</div>
+  <div class="legacy-item">Overview <span>LEGACY</span></div>
+  <div class="legacy-item">Materials &amp; alerts <span>LEGACY</span></div>
+  <div class="legacy-item">Model evaluation <span>LEGACY</span></div>
+  <div class="legacy-item">Workbook insights <span>LEGACY</span></div>
+  <div class="legacy-item">Data workspace <span>LEGACY</span></div>
+</aside>
+<main>
+<header class="topbar">Operations &nbsp;/&nbsp; <b>Replenishment insights</b></header>
+<div class="workspace">
+<div class="notice"><span class="tag">MOCK</span>Design mock with invented parts and numbers. Not Siemens data and not a validated forecast.</div>
+<div class="eyebrow">VIEW 2 &middot; INSIGHTS</div>
+<h1>Which parts need attention, and which limits need review?</h1>
+<p class="sub">Parts close to replenishment now, plus the parts that replenish most often, so the data steward can review Min/Max. Estimates from recorded transfers and the production schedule.</p>
+
+<div class="stats">
+  <div class="stat"><div class="stat-label">Alert tier</div><div class="stat-value red">27</div><small>Minimum within lead + 24 h</small></div>
+  <div class="stat"><div class="stat-label">Watch tier</div><div class="stat-value amber">95</div><small>Minimum within 72 h</small></div>
+  <div class="stat"><div class="stat-label">Problem parts</div><div class="stat-value">41</div><small>Replenish 6+ times in 30 days</small></div>
+  <div class="stat"><div class="stat-label">Median cover</div><div class="stat-value teal">25.0 d</div><small>(Max &minus; Min) &divide; demand</small></div>
+  <div class="stat"><div class="stat-label">Schedule pressure</div><div class="stat-value">63</div><small>Schedule demand 20%+ above history</small></div>
+</div>
+
+<section class="card" aria-labelledby="h-close">
+  <div class="card-head"><div><h2 id="h-close">Close to replenishment</h2><p>Soonest to reach minimum first. Alert tier sends email or Teams; Watch tier is dashboard only.</p></div>
+    <div class="ctl"><div><label>Supermarket</label><input value="All" aria-label="Supermarket"></div><button class="btn">Open Predicted alerts</button></div></div>
+  <div class="table-wrap"><table>
+    <thead><tr><th>PART</th><th>SUPERMARKET / BIN</th><th>STOCK</th><th>MIN</th><th>MAX</th><th>DEMAND / DAY</th><th>HOURS TO MIN</th><th>LEVEL</th><th>TIER</th></tr></thead>
+    <tbody id="close"></tbody></table></div>
+</section>
+
+<section class="card" aria-labelledby="h-prob">
+  <div class="card-head"><div><h2 id="h-prob">Problem parts</h2><p>Ranked by how often a part is replenished and how few days one fill lasts. Pick a lens, then a row for the evidence.</p></div>
+    <div class="ctl"><div><label>Target cover (days)</label><input value="7" aria-label="Target cover days"></div><button class="btn primary">Export review list (CSV)</button></div></div>
+  <div class="lenses"><span class="lens on">Frequent replenishment</span><span class="lens">Short cover</span><span class="lens">Schedule pressure</span><span class="lens">Below minimum</span><span class="lens">Days at zero</span></div>
+  <div class="table-wrap"><table>
+    <thead><tr><th>PART</th><th>SUPERMARKET</th><th>REPLEN / 30 D</th><th>COVER (DAYS)</th><th>SCHEDULE VS HISTORY</th><th>DAYS &le; MIN</th><th>MAX NOW</th><th>MAX FOR TARGET COVER</th></tr></thead>
+    <tbody id="prob"></tbody></table></div>
+</section>
+
+<section class="card" aria-labelledby="h-det">
+  <div class="card-head"><div><h2 id="h-det">Part detail &middot; Part A-1001</h2><p>Silver supermarket &middot; bin S.12.B &middot; Min 10 &middot; Max 50 &middot; stocked item</p></div><span class="chip alert">Alert</span></div>
+  <div class="card-body"><div class="detail">
+    <div><p class="cap">Projected stock, next 7 days (estimate)</p><svg id="proj" viewBox="0 0 560 200" width="100%" role="img" aria-label="Projected stock line chart"></svg></div>
+    <div><p class="cap">Replenishments, last 30 days (transfers)</p><svg id="hist" viewBox="0 0 400 200" width="100%" role="img" aria-label="Replenishment history bars"></svg></div>
+  </div>
+  <div class="evidence"><b>Evidence.</b> 9 replenishments in 30 days (median 3.1 days apart). Demand 11.4 units/day from the schedule; history says 8.2. One fill of 50 lasts 3.5 days. A Max of 90 would give 7.0 days of cover at 11.4/day.</div>
+  <p class="note">Estimates from recorded transfers and the production schedule. Not a validated forecast. Bin capacity is not in the data, so check the larger Max physically fits before changing it.</p></div>
+</section>
+</div></main></div>
+<script>
+const close=[
+ ["Part A-1001","Silver","S.12.B",14,10,50,11.4,"Blend",8,"alert",28],
+ ["Part B-2040","Green","G.03.A",22,15,60,6.1,"Schedule",27,"alert",25],
+ ["Part C-3310","Blue","B.18.C",9,8,40,3.0,"History",8,"alert",12],
+ ["Part D-4005","Brown","BR.01.C",31,20,90,4.2,"Schedule",63,"watch",15],
+ ["Part E-5120","Orange","OR.22.A",18,5,35,2.7,"Blend",115,"watch",48],
+ ["Part F-6672","Purple","P.07.B",40,25,120,5.5,"Schedule",65,"watch",33]];
+document.getElementById('close').innerHTML=close.map((r,i)=>{const pct=Math.round(r[3]/r[5]*100),mp=Math.round(r[4]/r[5]*100);
+ return `<tr class="${i==0?'sel':''}"><td><b>${r[0]}</b></td><td>${r[1]}<small>${r[2]}</small></td><td>${r[3]}</td><td>${r[4]}</td><td>${r[5]}</td><td>${r[6]}<small><span class="chip src">${r[7]}</span></small></td><td><b>${r[8]} h</b><small>${r[8]<=27?'inside alert window':'inside watch window'}</small></td><td><div class="bar"><i class="${r[9]=='alert'?'r':'a'}" style="width:${pct}%"></i><u style="left:${mp}%"></u></div></td><td><span class="chip ${r[9]}">${r[9]=='alert'?'Alert':'Watch'}</span></td></tr>`}).join('');
+// [part, supermarket, replen/30d, min, max, demand/day, schedule vs history, days<=min of 7]
+const prob=[
+ ["Part A-1001","Silver",9,10,50,11.4,"+39%",6],["Part G-7001","Green",8,10,45,8.5,"+12%",4],["Part H-8210","Blue",8,5,30,11.4,"+55%",3],
+ ["Part J-9100","Brown",7,15,60,9.0,"+4%",5],["Part K-1180","Yellow",7,20,75,8.7,"+22%",2],["Part L-2250","Orange",6,10,40,6.8,"-8%",1]];
+document.getElementById('prob').innerHTML=prob.map((r,i)=>{const cover=((r[4]-r[3])/r[5]).toFixed(1),tgt=Math.ceil((r[3]+7*r[5])/5)*5;
+ return `<tr class="${i==0?'sel':''}"><td><b>${r[0]}</b></td><td>${r[1]}</td><td>${r[2]}</td><td>${cover}</td><td>${r[6]}</td><td>${r[7]} of 7</td><td>${r[4]}<small>Min ${r[3]}</small></td><td><b>${tgt}</b><small>7 days of cover at ${r[5]}/day</small></td></tr>`}).join('');
+// projection chart
+(function(){const s=document.getElementById('proj'),W=560,H=200,L=36,B=24,T=10,R=10,days=7,y0=14,minv=10,maxv=50,rate=11.4;
+ const X=d=>L+(W-L-R)*d/days,Y=v=>T+(H-T-B)*(1-v/ maxv);
+ let g='';for(let v=0;v<=50;v+=10)g+=`<line x1="${L}" x2="${W-R}" y1="${Y(v)}" y2="${Y(v)}" stroke="#eef1f4"/><text x="4" y="${Y(v)+3}">${v}</text>`;
+ for(let d=0;d<=days;d++)g+=`<text x="${X(d)-6}" y="${H-6}">d${d}</text>`;
+ const crossD=(y0-minv)/rate;
+ g+=`<rect x="${X(0)}" y="${T}" width="${X(0.125)-X(0)}" height="${H-T-B}" fill="#fef1ec"/>`;
+ g+=`<line x1="${L}" x2="${W-R}" y1="${Y(minv)}" y2="${Y(minv)}" stroke="#c4320a" stroke-dasharray="4 3"/><text x="${W-R-70}" y="${Y(minv)-4}" style="fill:#c4320a">minimum 10</text>`;
+ g+=`<line x1="${L}" x2="${W-R}" y1="${Y(50)}" y2="${Y(50)}" stroke="#98a4b0" stroke-dasharray="2 3"/><text x="${W-R-60}" y="${Y(50)-4}">maximum 50</text>`;
+ const pts=[[0,y0],[Math.min(days,y0/rate),0]];g+=`<polyline fill="none" stroke="#00757a" stroke-width="2.5" points="${X(0)},${Y(y0)} ${X(y0/rate)},${Y(0)}"/>`;
+ g+=`<circle cx="${X(crossD)}" cy="${Y(minv)}" r="4.5" fill="#c4320a"/><text x="${X(crossD)+10}" y="${Y(minv)-8}" style="fill:#c4320a">reaches minimum in ~8 h</text>`;
+ g+=`<polyline fill="none" stroke="#2f5f98" stroke-width="2" stroke-dasharray="5 3" points="${X(0)},${Y(y0)} ${X(0.05)},${Y(y0-rate*0.05)} ${X(0.05)},${Y(50)} ${X(days)},${Y(Math.max(0,50-rate*(days-0.05)))}"/>`;
+ g+=`<text x="${X(1.4)}" y="${Y(47)}" style="fill:#2f5f98">if ordered to Max now</text>`;
+ s.innerHTML=g})();
+// history bars
+(function(){const s=document.getElementById('hist'),W=400,H=200,L=28,B=24,T=10,R=6,vals=[0,0,22,0,0,38,0,0,0,25,0,0,45,0,0,0,32,0,0,40,0,0,28,0,0,0,36,0,0,42],n=vals.length;
+ let g='';for(let v=0;v<=50;v+=10){const y=T+(H-T-B)*(1-v/50);g+=`<line x1="${L}" x2="${W-R}" y1="${y}" y2="${y}" stroke="#eef1f4"/><text x="2" y="${y+3}">${v}</text>`}
+ const bw=(W-L-R)/n;vals.forEach((v,i)=>{if(v){const h=(H-T-B)*v/50;g+=`<rect x="${L+i*bw+1}" y="${H-B-h}" width="${bw-2}" height="${h}" rx="2" fill="#00757a"/>`}});
+ g+=`<text x="${L}" y="${H-6}">30 days ago</text><text x="${W-R-34}" y="${H-6}">today</text>`;
+ g+=`<line x1="${L}" x2="${W-R}" y1="${T+(H-T-B)*(1-50/50)}" y2="${T}" stroke="#98a4b0" stroke-dasharray="2 3"/><text x="${W-R-90}" y="${T+10}">Max 50 (full bin)</text>`;
+ s.innerHTML=g})();
+</script></body></html>

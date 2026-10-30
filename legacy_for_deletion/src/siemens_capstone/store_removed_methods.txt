@@ -1,0 +1,150 @@
+# Methods removed from Store (class body, 4-space indented). Not importable.
+    def _materials(self, db, dataset_id):
+        return [json.loads(r['payload']) for r in db.execute('SELECT payload FROM materials WHERE dataset=? ORDER BY id', (dataset_id,))]
+
+    def _forecast(self, db, dataset_id):
+        dataset, _ = self._dataset(db, dataset_id)
+        if not dataset['forecast_ready']:
+            raise ValueError('This workbook lacks the verified consumption and stock history required for forecasting.')
+        rows = []
+        for material in self._materials(db, dataset_id):
+            material['demand_factor'] = dataset['demand_factor']
+            p = predict(material, material['history'], dataset['as_of'])
+            baseline = predict(material, material['history'], dataset['as_of'], 'baseline')
+            rows.append(dict(id=material['id'], forecast=p, baseline=baseline))
+            active = db.execute("SELECT * FROM alerts WHERE dataset=? AND material_id=? AND status!='Delivered'", (dataset_id, material['id'])).fetchone()
+            if p['risk'] in ('Critical', 'Watch'):
+                payload = dict(material_id=material['id'], material_name=material['name'], bin=material['bin'],
+                               area=material['area'], risk=p['risk'], reason=p['reason'], crossing_at=p['crossing_at'],
+                               lead_hours=material['lead_hours'], created_at=now(), forecast_as_of=dataset['as_of'])
+                if active:
+                    previous = json.loads(active['payload']); payload['created_at'] = previous['created_at']
+                    db.execute('UPDATE alerts SET payload=? WHERE id=?', (encoded(payload), active['id']))
+                else:
+                    db.execute('INSERT INTO alerts VALUES(?,?,?,?,?)', (uuid.uuid4().hex, dataset_id, material['id'], 'Open', encoded(payload)))
+                    self._event(db, dataset_id, f"Replenishment recommendation opened for {material['id']}.")
+            elif active:
+                previous = json.loads(active['payload'])
+                previous.update(risk=p['risk'], reason='Risk changed after the latest forecast. Review the existing recommendation before delivery.', crossing_at=p['crossing_at'])
+                db.execute('UPDATE alerts SET payload=? WHERE id=?', (encoded(previous), active['id']))
+        run = dict(id=uuid.uuid4().hex, created_at=now(), as_of=dataset['as_of'], engine_version=VERSION,
+                   data_kind=dataset['kind'], demand_factor=dataset['demand_factor'], predictions=rows,
+                   policies=[{k:m[k] for k in ('id', 'stock', 'threshold', 'lead_hours', 'buffer_hours', 'scheduled_load', 'snapshot_at')} for m in self._materials(db, dataset_id)])
+        db.execute('INSERT INTO runs VALUES(?,?,?,?)', (run['id'], dataset_id, run['created_at'], encoded(run)))
+        return run
+
+    def state(self, dataset_id):
+        with self.connection() as db:
+            dataset, quality = self._dataset(db, dataset_id)
+            materials = self._materials(db, dataset_id)
+            for m in materials:
+                m['demand_factor'] = dataset['demand_factor']
+                m['forecast'] = predict(m, m['history'], dataset['as_of'])
+                m['baseline'] = predict(m, m['history'], dataset['as_of'], 'baseline')
+            alerts = [dict(json.loads(r['payload']), id=r['id'], status=r['status']) for r in db.execute('SELECT * FROM alerts WHERE dataset=? ORDER BY rowid DESC', (dataset_id,))]
+            alerts.sort(key=lambda a: (a['status'] == 'Delivered', a.get('crossing_at') or '9999', a['material_id']))
+            evaluation = db.execute('SELECT payload FROM evaluations WHERE dataset=? ORDER BY rowid DESC LIMIT 1', (dataset_id,)).fetchone()
+            activity = [dict(r) for r in db.execute('SELECT created_at,message FROM activity WHERE dataset=? ORDER BY rowid DESC LIMIT 30', (dataset_id,))]
+            run_count = db.execute('SELECT COUNT(*) FROM runs WHERE dataset=?', (dataset_id,)).fetchone()[0]
+            return dict(dataset=dataset, quality=quality, materials=materials, alerts=alerts, activity=activity,
+                        evaluation=json.loads(evaluation['payload']) if evaluation else None, run_count=run_count)
+
+    def forecast(self, dataset_id):
+        with self.connection() as db:
+            run = self._forecast(db, dataset_id)
+            self._event(db, dataset_id, 'Forecast run saved with policies and scenario load.')
+            return run
+
+    def update_policy(self, dataset_id, material_id, policy):
+        clean = dict(threshold=number(policy.get('threshold'), 'Threshold', 0, 1e6),
+                     lead_hours=number(policy.get('lead_hours'), 'Lead time', 0.1, 168),
+                     buffer_hours=number(policy.get('buffer_hours'), 'Buffer', 0, 168))
+        with self.connection() as db:
+            row = db.execute('SELECT payload FROM materials WHERE dataset=? AND id=?', (dataset_id, material_id)).fetchone()
+            if not row: raise ValueError('Material not found.')
+            m = json.loads(row['payload']); m.update(clean)
+            db.execute('UPDATE materials SET payload=? WHERE dataset=? AND id=?', (encoded(m), dataset_id, material_id))
+            self._event(db, dataset_id, f'Policy saved for {material_id}.')
+            self._forecast(db, dataset_id)
+        return clean
+
+    def scenario(self, dataset_id, factor):
+        factor = number(factor, 'Demand factor', 0.25, 3)
+        with self.connection() as db:
+            dataset, _ = self._dataset(db, dataset_id)
+            if dataset['kind'] != 'synthetic': raise ValueError('Scenario controls apply only to the synthetic sandbox.')
+            dataset['demand_factor'] = factor
+            db.execute('UPDATE datasets SET payload=? WHERE id=?', (encoded(dataset), dataset_id))
+            self._forecast(db, dataset_id)
+            self._event(db, dataset_id, f'Scenario production load set to {factor:g}×.')
+
+    def alert_action(self, alert_id, action, quantity=None):
+        transitions = {'Open': ('Acknowledged', 'Dispatched'), 'Acknowledged': ('Dispatched',), 'Dispatched': ('Delivered',)}
+        with self.connection() as db:
+            row = db.execute('SELECT * FROM alerts WHERE id=?', (alert_id,)).fetchone()
+            if not row: raise ValueError('Alert not found.')
+            if action not in transitions.get(row['status'], ()):
+                raise ValueError('Invalid transition. A delivery requires a dispatched recommendation and can be recorded once.')
+            payload = json.loads(row['payload'])
+            if action == 'Delivered':
+                qty = number(quantity, 'Delivered quantity', 1, 1e6)
+                if not qty.is_integer(): raise ValueError('Count units require a whole delivered quantity.')
+                m = json.loads(db.execute('SELECT payload FROM materials WHERE dataset=? AND id=?', (row['dataset'], row['material_id'])).fetchone()['payload'])
+                m['stock'] += qty
+                dataset, _ = self._dataset(db, row['dataset'])
+                m['snapshot_at'] = dataset['as_of']
+                payload['delivered_quantity'] = qty; payload['delivered_at'] = now()
+                db.execute('UPDATE materials SET payload=? WHERE dataset=? AND id=?', (encoded(m), row['dataset'], row['material_id']))
+            db.execute('UPDATE alerts SET status=?,payload=? WHERE id=?', (action, encoded(payload), alert_id))
+            self._event(db, row['dataset'], f"{row['material_id']}: {action}" + (f' · +{quantity} pieces received in the simulation.' if action == 'Delivered' else '.'))
+            if action == 'Delivered': self._forecast(db, row['dataset'])
+
+    def evaluate(self, dataset_id):
+        with self.connection() as db:
+            dataset, _ = self._dataset(db, dataset_id)
+            if dataset['kind'] != 'synthetic':
+                raise ValueError('No verified historical depletion labels exist for this workbook. Evaluation is available on the synthetic sandbox only.')
+            result = evaluate(synthetic_episodes())
+            result.update(id=uuid.uuid4().hex, created_at=now())
+            db.execute('INSERT INTO evaluations VALUES(?,?,?,?)', (result['id'], dataset_id, result['created_at'], encoded(result)))
+            self._event(db, dataset_id, 'Both estimators evaluated on 60 fixed synthetic holdout episodes.')
+            return result
+
+    def workbook_scenario(self, dataset_id, position_id, usage_multiplier, minimum_stock, lead_hours):
+        analysis = self.insights(dataset_id)
+        result = scenario(analysis, position_id, usage_multiplier, minimum_stock, lead_hours)
+        result.update(id=uuid.uuid4().hex, dataset_id=dataset_id, created_at=now(),
+                      source_checksum=analysis['source_checksum'], analysis_version=ANALYSIS_VERSION)
+        with self.connection() as db:
+            db.execute('INSERT INTO workbook_scenarios VALUES(?,?,?,?)', (result['id'], dataset_id, result['created_at'], encoded(result)))
+            self._event(db, dataset_id, f"Assumption-based scenario saved for {result['material']} / {result['bin']}. Source stock is unchanged.")
+        return result
+
+    def export(self, dataset_id):
+        state = self.state(dataset_id)
+        if state['dataset']['kind'] == 'workbook': state['insights'] = self.insights(dataset_id)
+        with self.connection() as db:
+            state['runs'] = [json.loads(r['payload']) for r in db.execute('SELECT payload FROM runs WHERE dataset=? ORDER BY rowid DESC LIMIT 10', (dataset_id,))]
+        state['exported_at'] = now()
+        state['notice'] = 'Local evaluation artifact. Synthetic results are not Siemens validation. Review imported summaries before sharing.'
+        return state
+
+
+# Removed startup block (synthetic demo dataset)
+            if not db.execute("SELECT id FROM datasets WHERE id='demo'").fetchone():
+                dataset = dict(id='demo', name='Factory sandbox', kind='synthetic', as_of=AS_OF,
+                               demand_factor=1, created_at=now(), forecast_ready=True)
+                quality = dict(total_rows=288, findings=[], joins=[], blockers=[], forecast_ready=True,
+                               sheets=[dict(name='Generated hourly consumption', rows=288, columns=4,
+                                            fields=['at', 'used', 'load', 'stock'], grain='material + hour')],
+                               description='Deterministic synthetic data; no Siemens records. Seed 482.')
+                db.execute('INSERT INTO datasets VALUES(?,?,?)', ('demo', encoded(dataset), encoded(quality)))
+                for m in demo_materials():
+                    db.execute('INSERT INTO materials VALUES(?,?,?)', ('demo', m['id'], encoded(m)))
+                self._event(db, 'demo', 'Synthetic factory sandbox created. No Siemens records are included.')
+        # Initial outputs exist on first launch. Reopening preserves existing results.
+        with self.connection() as db:
+            has_runs = db.execute("SELECT 1 FROM runs WHERE dataset='demo'").fetchone()
+            has_eval = db.execute("SELECT 1 FROM evaluations WHERE dataset='demo'").fetchone()
+        if not has_runs: self.forecast('demo')
+        if not has_eval: self.evaluate('demo')

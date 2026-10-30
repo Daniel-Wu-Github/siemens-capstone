@@ -1,0 +1,9 @@
+:root{
+/* space */--s1:4px;--s2:8px;--s3:12px;--s4:16px;--s5:24px;--s6:32px;--s7:48px;
+/* type */--font:-apple-system,"Segoe UI",Helvetica,Arial,sans-serif;--t-xs:12px;--t-sm:13px;--t-md:14px;--t-lg:16px;--t-xl:20px;--t-2xl:28px;--lh-data:1.3;--lh-body:1.45;
+/* colour: neutrals */--bg:#f4f5f6;--surface:#fff;--sunken:#eceef0;--ink:#16202a;--ink-2:#3b4752;--muted:#5b6773;--line:#d5d9de;--line-strong:#9aa4ae;
+/* colour: accent (existing petrol) */--accent:#00757a;--accent-ink:#fff;--accent-wash:#e4f1f1;
+/* colour: status, always paired with a text label */--alert:#b3261e;--alert-wash:#fbe9e7;--predicted:#9a5200;--predicted-wash:#fdf0dc;--watch:#2b5c8a;--watch-wash:#e6eef6;--ok:#2e6b3a;
+/* shape */--radius:2px;--focus:0 0 0 2px #fff,0 0 0 4px var(--accent);--shadow-overlay:0 4px 16px rgba(22,32,42,.18);
+/* motion */--dur:120ms;
+}

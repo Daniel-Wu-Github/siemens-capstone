@@ -4,7 +4,7 @@ This Texas A&M CSCE 482 capstone explores how to warn warehouse staff before mat
 
 ## Run the prototype
 
-The prototype has one frontend file, `index.html`, with all styling, JavaScript, and SVG charts embedded. A local Python server supplies the API and persists datasets, source rows, forecast runs, evaluations, policies, recommendations, and simulated receipts in SQLite.
+The prototype has one frontend file, `index.html`, with all styling, JavaScript, and SVG charts embedded. A local Python server supplies the API and persists imported workbooks, reference files, stock alerts, settings, and notifications in SQLite.
 
 Requires Python 3.11 or newer. From this repository:
 
@@ -16,32 +16,23 @@ python3 -m venv .venv
 
 Open **http://127.0.0.1:8765**. If your system Python is older, use `uv venv --python 3.11` followed by `uv pip install --python .venv/bin/python -r requirements.txt` instead.
 
-The first launch creates a deterministic synthetic factory sandbox with 12 materials, a forecast, active recommendations, and an evaluation of 60 held-out simulated scenarios. You can immediately:
+The app has three pages and two setup pages. **Stock alerts** (Phase 1) lists bins at or below their minimum and sends alerts. **Predicted alerts** (Phase 2) forecasts which bins will reach their minimum within the lead time plus a safety buffer, and shows how each number was calculated. **Replenishment insights** (View 2) is a planned page and shows no data yet. **Data sources** imports the workbook and reference files (Min/Max tolerances, BOM, dated bin-status snapshots). **Settings** holds the forecast settings. The design is described in [docs/frontend_design_system.md](docs/frontend_design_system.md).
 
-1. Inspect inventory trends and projected minimum crossings; change the chart material and time window.
-2. Adjust production demand, minimum stock, warehouse lead time, and warning buffer. Changes persist across reloads and restarts.
-3. Acknowledge or dispatch recommendations and record simulated deliveries. Dispatch changes status; a confirmed receipt increases stock once.
-4. Compare a trailing consumption baseline with a schedule adjusted estimator and download the full evaluation report.
-5. Import an XLSX workbook in **Data workspace** to save its source rows, schema, quality findings, and potential join coverage locally.
-6. Open **Workbook insights** for stock-snapshot review, weekly transfer counts, production activity, planned workload, and a saved what-if scenario using transfer target quantities.
+On first launch the workspace is empty: open **Data sources**, import the workbook, then attach the reference files. The earlier synthetic sandbox, overview, materials, model evaluation, workbook insights and part forecast pages were retired; their code is kept for review in `legacy_for_deletion/` (see its `MANIFEST.md`) and is not run by the app or the tests.
 
-The synthetic evaluation demonstrates behavior, not Siemens model accuracy. Workbook imports remain separate from the demo; the provided four-sheet schema lacks verified consumption history, snapshot timing, and business definitions needed for valid depletion forecasting. The interface displays these limitations instead of fabricating predictions.
-
-The workbook demo uses the available extract immediately. Its what-if calculator explicitly assumes transfer targets were received and average usage follows those quantities. Set a usage multiplier, minimum stock, and warehouse lead time to see the scenario result. Saving it preserves the source stock. See the [workbook demo guide](docs/workbook-demo.md) for the source definitions and assumptions.
+The forecast is an estimate from recorded transfer quantities, not measured consumption. It has not been validated against real stockouts.
 
 ## Data and output locations
 
 - `data/`: the single local data folder, ignored by Git. Place the Siemens workbooks here (`Prod_Capstone_Data.xlsx`, `Min_Max-SM.xlsx`, `BOMEXAMPLE.xlsx`, `Most_Replen_Summer.xlsx`); the real-file tests read them from this folder and skip when they are absent.
 - `data/capstone.sqlite3`: persistent local database, ignored by Git. Closing the server does not erase it.
-- `artifacts/`: desktop and mobile screenshots produced by browser tests, ignored by Git.
-- `outputs/`: optional exported reports, ignored by Git.
+- `artifacts/`: screenshots produced by browser tests, ignored by Git.
 - `handoff.md`: detailed local plan and implementation handoff, always ignored by Git.
 
-To ingest a local workbook at startup or generate a visible JSON evaluation artifact:
+To ingest a local workbook at startup:
 
 ```sh
 .venv/bin/python server.py --import-workbook data/Prod_Capstone_Data.xlsx --attach data/Min_Max-SM.xlsx --attach data/BOMEXAMPLE.xlsx
-.venv/bin/python server.py --export-report outputs/demo-report.json
 ```
 
 Use `--port 8766` for a different port or `--db /path/to/local.sqlite3` for a separate workspace. The server binds to loopback only. Stop it with Ctrl+C. Opening `index.html` directly shows startup instructions; persistence requires the running backend.
@@ -54,7 +45,7 @@ Use `--port 8766` for a different port or `--db /path/to/local.sqlite3` for a se
 .venv/bin/python -m pytest -q
 ```
 
-To run only the backend tests, use `pytest -m 'not browser'`. Browser tests use temporary databases and synthetic workbooks, exercise saved edits, receipt handling, import, export, and mobile layout, and capture screenshots in `artifacts/`. See [evaluation methodology](docs/evaluation.md) for scoring definitions and [architecture](docs/architecture.md) for API contracts.
+To run only the backend tests, use `pytest -m 'not browser'`. Browser tests use temporary databases and synthetic workbooks, exercise saved edits, import, and desktop layout, and capture screenshots in `artifacts/`. See [architecture](docs/architecture.md) for API contracts.
 
 Live SCADA ingestion, factory system writes, real notifications, cloud deployment, and sponsor UAT remain outside this local implementation. Siemens approval and missing source definitions are still needed for operational use.
 
@@ -67,12 +58,20 @@ Live SCADA ingestion, factory system writes, real notifications, cloud deploymen
 - [Decision log](docs/decisions.md): confirmed choices and unresolved proposals.
 - [Plan audit](docs/plan-audit.md): changes made to meet the implementation request.
 - [Architecture](docs/architecture.md): backend storage, endpoints, and limitations.
-- [Evaluation](docs/evaluation.md): estimator definitions, scoring, and requirement coverage.
-- [Workbook demo](docs/workbook-demo.md): descriptive analytics and assumption-based scenarios from imported data.
-- [Stock alerts](docs/alerts.md): Phase 1 reactive alerts, simulated stock edits, and email/Teams/webhook delivery.
+- [Stock alerts](docs/alerts.md): Phase 1 reactive and Phase 2 predicted alerts, simulated stock edits, and email/Teams/webhook delivery.
+- [Phase 2 formulas](docs/formulas.md): locked demand, hours-to-minimum, alert-tier and suggested-quantity formulas.
 - [Agent guidance](AGENTS.md): how to work safely and keep project context current.
 
 The local handoff must not contain credentials or raw Siemens data.
+
+## Phase 2 formulas (locked)
+
+Full definitions and a worked example: [docs/formulas.md](docs/formulas.md). Changing any of them needs the user's explicit permission each time.
+
+- `demand/day = (1 x history + 1 x schedule) / 2`; if schedule differs from history by more than 50%, use schedule only.
+- `hours_to_min = max(0, available - min) / demand x 24`
+- Alert if `available <= min`; Predicted if `hours_to_min <= lead + 24`; Watch (dashboard only) if `hours_to_min <= 72`.
+- `suggested_qty = ceil(max - (available - demand x lead / 24))`
 
 ## Working agreement
 

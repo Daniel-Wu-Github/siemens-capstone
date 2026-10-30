@@ -442,7 +442,7 @@ def real_env():
 @real
 def test_real_workbook_row_counts(real_env):
     store, ds, _ = real_env
-    q = store.state(ds)['quality']
+    q = store.sources(ds)['quality']
     counts = {s['name']: s['rows'] for s in q['sheets']}
     print('REAL sheet rows:', counts)
     assert counts == {'HISTORICAL_PROD_DATA': 75576, 'PLANNED_PROD_SCHEDULE': 6362, 'HISTORICAL_SM_REPLENISHMENTS': 30972, 'BIN_STATUS_EXAMPLE': 2317}

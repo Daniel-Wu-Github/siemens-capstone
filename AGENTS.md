@@ -8,3 +8,5 @@ Read `README.md`, `docs/project-brief.md`, `docs/requirements.md`, `docs/data-in
 - Do not claim model accuracy, stockout prevention, security compliance, or operational readiness without corresponding evidence and sponsor review.
 - Jira is a coordination tool, not the sole source of technical truth. If Jira access becomes available, read the current board before selecting work; use issue keys in branches, commits, and pull requests after the Jira and GitHub integration is confirmed. Do not move or edit unrelated issues.
 - Update the README and relevant docs when implementation changes a documented interface, data contract, or requirement.
+- UI work: read `docs/frontend_design_system.md` first (tokens, layout, components). Do not change the visual design without the user's approval.
+- The Phase 2 formulas in `docs/formulas.md` (also summarized in the README and implemented in `proactive.py`) are locked. Never change them, their defaults or their wording without the user's explicit permission for that specific change.
