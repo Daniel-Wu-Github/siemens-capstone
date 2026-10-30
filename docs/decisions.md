@@ -21,3 +21,4 @@ Use this file for decisions that change scope, data contracts, architecture, or 
 | 2026-10-09 | Minimum 0 is a real minimum | User decision | An empty bin with min 0 alerts. |
 | 2026-10-09 | One alert definition across pages | User decision | The Stock alerts definitions are authoritative; Workbook insights now count the same 72 at-or-below positions and use the same tolerance flags. |
 | 2026-10-09 | Every alert change is notified | Implemented after independent QC | Page loads, reference imports, edits, and resets all notify the changes they cause, once. Open sponsor questions are in `SPONSOR_QUESTIONS.md`. |
+| 2026-10-09 | Machine Learning Depletion Model | Implemented prototype | Two-Stage Hybrid Quantile GBDT and Accelerated Failure Time hazard model implemented on feature branch. Combines BOM-expanded planned production demand with empirical station slippage and warehouse lead-time percentiles to predict P10, P50, and P90 days-to-minimum. |

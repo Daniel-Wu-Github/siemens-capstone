@@ -49,6 +49,12 @@ def handler_for(store):
                 if url.path == '/api/insights': return self.respond(200, store.insights(dataset))
                 if url.path == '/api/stock': return self.respond(200, store.stock_view(dataset))
                 if url.path == '/api/export': return self.respond(200, store.export(dataset), download=True)
+                if url.path == '/api/ml/forecast':
+                    buf = float(parse_qs(url.query).get('buffer_days', [3.0])[0])
+                    return self.respond(200, store.ml_forecast(dataset, buf))
+                if url.path == '/api/ml/evaluate':
+                    h = float(parse_qs(url.query).get('horizon_days', [7.0])[0])
+                    return self.respond(200, store.ml_evaluate(dataset, h))
                 return self.respond(404, {'error': 'Not found.'})
             except ValueError as exc:
                 return self.respond(400, {'error': str(exc)})
@@ -90,6 +96,8 @@ def handler_for(store):
                 elif url.path == '/api/stock/digest': result = store.stock_digest(dataset)
                 elif url.path == '/api/stock/ack': result = store.acknowledge_stock_alert(body.get('id'))
                 elif url.path == '/api/workbook-scenario': result = store.workbook_scenario(dataset, body.get('position_id'), body.get('usage_multiplier'), body.get('minimum_stock'), body.get('lead_hours'))
+                elif url.path == '/api/ml/forecast': result = store.ml_forecast(dataset, body.get('buffer_days', 3.0))
+                elif url.path == '/api/ml/evaluate': result = store.ml_evaluate(dataset, body.get('horizon_days', 7.0))
                 else: return self.respond(404, {'error': 'Not found.'})
                 return self.respond(200, result if result is not None else {'ok': True})
             except (ValueError, TypeError, KeyError, AttributeError) as exc:

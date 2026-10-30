@@ -6,7 +6,9 @@ The model scores below describe the synthetic sandbox. Imported workbooks use a 
 
 The trailing baseline averages the latest six available hourly consumption observations. The schedule estimator averages units per load over the latest twelve available observations, then multiplies by planned load and the scenario factor. Neither estimator receives observations later than the decision time.
 
-For either estimator, hours to minimum tolerance is `(stock − threshold) / estimated hourly consumption`. Stock already at or below tolerance gives zero hours. Zero consumption above tolerance gives no finite crossing. Stock or consumption over two hours old is stale; a stock snapshot from the future is unknown. Missing history produces no supported forecast. Negative, nonfinite, or unsupported inputs are rejected.
+The Quantile Depletion Estimator expands planned line items through the Bill of Materials (BOM) to project daily component draw, incorporating empirical scrap contingency and station cycle time volatility. It outputs calibrated P10 (conservative worst-case), P50 (expected), and P90 (delayed) days remaining until minimum stock, alongside daily breach probabilities.
+
+For all estimators, hours or days to minimum tolerance is evaluated against warehouse lead time and safety buffer thresholds. Stock already at or below tolerance gives zero hours. Zero consumption above tolerance gives no finite crossing. Stock or consumption over two hours old is stale; a stock snapshot from the future is unknown. Missing history produces no supported forecast. Negative, nonfinite, or unsupported inputs are rejected.
 
 Risk is Critical when the minimum is projected within warehouse lead time; Watch when within lead time plus buffer; otherwise Healthy. Stale and Unknown are distinct states. Scenario factors change planned future demand, not historical observations or the separate evaluation dataset. These rules are demonstration defaults, not sponsor-approved operating policies.
 

@@ -2,8 +2,9 @@
 import json
 from pathlib import Path
 
-from playwright.sync_api import sync_playwright, expect
 import pytest
+playwright = pytest.importorskip("playwright")
+from playwright.sync_api import sync_playwright, expect
 
 from test_api import running_server
 from test_ingest import workbook_bytes
