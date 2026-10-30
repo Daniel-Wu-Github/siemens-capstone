@@ -27,10 +27,11 @@ def test_reference_import_dedupes_latest_wins_and_invalidates_cache(tmp_path):
     from test_ingest import SNAPSHOT
     store, dsid, table_bytes, TOL, BOM = reference_store(tmp_path)
     assert store.insights(dsid)['references']['tolerances']['loaded'] is False
-    result = store.import_reference(dsid, table_bytes({'Sheet3': TOL}), 't.xlsx')
+    tolerance_file = table_bytes({'Sheet3': TOL})  # Reattach the same bytes; XLSX ZIP timestamps vary between builds.
+    result = store.import_reference(dsid, tolerance_file, 't.xlsx')
     assert result['kind'] == 'tolerances' and result['dataset_id'] == dsid and result['rows'] == 2 and result['as_of'] is None
     assert store.insights(dsid)['references']['tolerances']['rows'] == 2  # cache was dropped
-    store.import_reference(dsid, table_bytes({'Sheet3': TOL}), 't.xlsx')
+    store.import_reference(dsid, tolerance_file, 't.xlsx')
     with store.connection() as db: assert db.execute('SELECT COUNT(*) FROM "references"').fetchone()[0] == 1
     store.import_reference(dsid, table_bytes({'Sheet3': TOL[:2]}), 't2.xlsx')
     assert store.insights(dsid)['references']['tolerances']['rows'] == 1

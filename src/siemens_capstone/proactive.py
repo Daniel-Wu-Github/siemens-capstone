@@ -10,11 +10,11 @@ import os
 
 from .alerts import label, position_key
 
-DEFAULT_SETTINGS = dict(lead_hours_stocked=3.0, lead_hours_fab=3.0, safety_hours=0.0,
-                        weights=dict(history=1.0, schedule=1.0, observed=1.0), divergence_pct=50.0)
-RANGES = dict(lead_hours_stocked=(0, 720), lead_hours_fab=(0, 720), safety_hours=(0, 168), divergence_pct=(0, 1000))
+DEFAULT_SETTINGS = dict(lead_hours_stocked=3.0, lead_hours_fab=3.0, safety_hours=24.0, watch_hours=72.0,
+                        weights=dict(history=1.0, schedule=1.0, observed=0.0), divergence_pct=50.0)
+RANGES = dict(lead_hours_stocked=(0, 720), lead_hours_fab=(0, 720), safety_hours=(0, 168), watch_hours=(0, 720), divergence_pct=(0, 1000))
 WEIGHT_RANGE = (0, 10)
-ENV = dict(LEAD_HOURS_STOCKED='lead_hours_stocked', LEAD_HOURS_FAB='lead_hours_fab', ALERT_SAFETY_HOURS='safety_hours')
+ENV = dict(LEAD_HOURS_STOCKED='lead_hours_stocked', LEAD_HOURS_FAB='lead_hours_fab', ALERT_SAFETY_HOURS='safety_hours', ALERT_WATCH_HOURS='watch_hours')
 NAMES = ('history', 'schedule', 'observed')
 
 
@@ -94,6 +94,7 @@ def project(items, inventory, settings, lead_classes=None, rule_status_key='stat
             hours = max(0, p['available'] - p['min']) / rate * 24
             p['hours_to_min'] = round(hours, 2)
             if hours <= lead + safety: p['forecast'], p[rule_status_key] = 'within_lead', 'Predicted'
+            elif hours <= settings['watch_hours']: p['forecast'] = 'watch'
             else: p['forecast'] = 'ok'
         if p['max'] is not None and p['max'] > 0 and (rate is not None or p['forecast'] == 'below_min'):
             p['suggested_qty'] = max(0, math.ceil(p['max'] - (p['available'] - (rate or 0) * lead / 24)))

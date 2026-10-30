@@ -479,7 +479,8 @@ def test_real_open_alert_counts_at_or_below_and_strict(real_env, tmp_path):
     strict = Store(copy, alert_config=alert_cfg(tmp_path / 'ob', rule='below')).stock_view(ds)
     print('REAL alerts (available<min):', strict['summary']['alerts'])
     assert (len(pos), len(positive), len(zero)) == (72, 14, 58)
-    assert len(open_) == 72
+    assert len([a for a in open_ if a.get('kind', 'below_min') == 'below_min']) == 72
+    assert len(open_) == 105
     assert strict['summary']['alerts'] == 13
 
 

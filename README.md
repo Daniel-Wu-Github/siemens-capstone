@@ -4,7 +4,7 @@ This Texas A&M CSCE 482 capstone explores how to warn warehouse staff before mat
 
 ## Run the prototype
 
-The prototype has one frontend file, `index.html`, with all styling, JavaScript, and SVG charts embedded. A local Python server supplies the API and persists imported workbooks, reference files, stock alerts, settings, and notifications in SQLite.
+The prototype has one frontend file, `index.html`, with all styling, JavaScript, and SVG charts embedded. A local Python server supplies the API and persists imported workbooks, reference files, stock alerts, settings, presets, and notifications in SQLite.
 
 Requires Python 3.11 or newer. From this repository:
 
@@ -16,9 +16,16 @@ python3 -m venv .venv
 
 Open **http://127.0.0.1:8765**. If your system Python is older, use `uv venv --python 3.11` followed by `uv pip install --python .venv/bin/python -r requirements.txt` instead.
 
-The app has three pages and two setup pages. **Stock alerts** (Phase 1) lists bins at or below their minimum and sends alerts. **Predicted alerts** (Phase 2) forecasts which bins will reach their minimum within the lead time plus a safety buffer, and shows how each number was calculated. **Replenishment insights** (View 2) is a planned page and shows no data yet. **Data sources** imports the workbook and reference files (Min/Max tolerances, BOM, dated bin-status snapshots). **Settings** holds the forecast settings. The design is described in [docs/frontend_design_system.md](docs/frontend_design_system.md).
+The app has three main pages and two setup pages:
+- **Stock alerts** (Phase 1): Lists bins at or below their minimum tolerance and dispatches alerts.
+- **Predicted alerts** (Phase 2): Forecasts which bins will reach their minimum within lead time plus safety buffer, provides a Watch tier for early warehouse visibility, and shows how each calculation is derived.
+- **Replenishment insights** (View 2): Evaluates problem replenishment positions with refill metrics, divergence analysis between transfer cadence and production schedule, problem lenses (short refills, frequent refills, schedule divergence), and CSV export.
+- **Data sources**: Imports the 4-sheet workbook and attaches reference files (Min/Max tolerances, BOM, dated bin-status snapshots).
+- **Settings**: Configures forecast parameters, lead times, safety buffer, watch window, and includes the interactive **Try weights** slider panel with debounced live preview and saved presets.
 
-On first launch the workspace is empty: open **Data sources**, import the workbook, then attach the reference files. The earlier synthetic sandbox, overview, materials, model evaluation, workbook insights and part forecast pages were retired; their code is kept for review in `legacy_for_deletion/` (see its `MANIFEST.md`) and is not run by the app or the tests.
+The UI design system is described in [docs/frontend_design_system.md](docs/frontend_design_system.md).
+
+On first launch the workspace is empty: open **Data sources**, import the workbook, then attach reference files. The earlier synthetic sandbox, overview, materials, model evaluation, workbook insights, and part forecast pages were retired; their code is kept for review in `legacy_for_deletion/` (see its `MANIFEST.md`) and is not run by the app or tests.
 
 The forecast is an estimate from recorded transfer quantities, not measured consumption. It has not been validated against real stockouts.
 
@@ -34,6 +41,24 @@ To ingest a local workbook at startup:
 ```sh
 .venv/bin/python server.py --import-workbook data/Prod_Capstone_Data.xlsx --attach data/Min_Max-SM.xlsx --attach data/BOMEXAMPLE.xlsx
 ```
+
+Daily files with `Part, Location, Min, Max, Live Value` are imported as stock snapshots. Their date comes from the first `YYYY-MM-DD` in the filename or `--as-of`. The attached tolerance file remains authoritative for Min/Max; disagreements appear as import warnings. To attach files to an existing dataset without sending notifications or starting another server:
+
+```sh
+.venv/bin/python server.py --db /path/to/copy.sqlite3 --dataset <workbook-id> --quiet --no-serve --attach /path/to/Bin_Status_2026-10-22.xlsx
+```
+
+`--quiet` still synchronizes alert state. Use a database copy for backfill review before changing the live workspace.
+
+Replenishment insights JSON/CSV export and settings preview/preset APIs power the interactive frontend; see [architecture](docs/architecture.md). Preview does not save settings, change alerts, or send notifications.
+
+The offline demand-rate backtest writes aggregate Markdown and JSON reports to ignored `outputs/`:
+
+```sh
+.venv/bin/python scripts/backtest_rates.py --db /path/to/copy.sqlite3
+```
+
+It holds out the last 30 days of replenishment transfers and trains on the preceding 30 days. Schedule variants require planned lines in the holdout; completed-production variants are separately labelled perfect-foresight upper bounds. This validates demand-rate estimates, not stockout prediction.
 
 Use `--port 8766` for a different port or `--db /path/to/local.sqlite3` for a separate workspace. The server binds to loopback only. Stop it with Ctrl+C. Opening `index.html` directly shows startup instructions; persistence requires the running backend.
 
@@ -58,8 +83,10 @@ Live SCADA ingestion, factory system writes, real notifications, cloud deploymen
 - [Decision log](docs/decisions.md): confirmed choices and unresolved proposals.
 - [Plan audit](docs/plan-audit.md): changes made to meet the implementation request.
 - [Architecture](docs/architecture.md): backend storage, endpoints, and limitations.
-- [Stock alerts](docs/alerts.md): Phase 1 reactive and Phase 2 predicted alerts, simulated stock edits, and email/Teams/webhook delivery.
+- [Stock alerts](docs/alerts.md): Phase 1 reactive and Phase 2 predicted alerts, Watch tier, simulated stock edits, and email/Teams/webhook delivery.
+- [Teams setup](docs/teams-setup.md): step-by-step configuration for Microsoft Teams webhook workflows and cards.
 - [Phase 2 formulas](docs/formulas.md): locked demand, hours-to-minimum, alert-tier and suggested-quantity formulas.
+- [Open items](docs/open-items.md): deferred features, ML model evaluation, and outstanding data deliveries.
 - [Agent guidance](AGENTS.md): how to work safely and keep project context current.
 
 The local handoff must not contain credentials or raw Siemens data.

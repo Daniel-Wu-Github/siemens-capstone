@@ -6,6 +6,7 @@ import traceback
 from urllib.parse import parse_qs, urlsplit
 
 from .ingest import is_full_workbook
+from . import insights_parts
 from .paths import INDEX_HTML as HTML
 MAX_UPLOAD = 32 * 1024 * 1024
 
@@ -20,11 +21,13 @@ def handler_for(store):
             traceback.print_exc(file=sys.stderr)
             return self.respond(500, {'error': 'The operation could not be completed. Existing saved data was preserved. See the server log.'})
 
-        def respond(self, status, value, content_type='application/json; charset=utf-8'):
+        def respond(self, status, value, content_type='application/json; charset=utf-8', headers=None):
             body = value if isinstance(value, bytes) else json.dumps(value, allow_nan=False).encode()
             self.send_response(status)
             self.send_header('Content-Type', content_type)
             self.send_header('Content-Length', str(len(body)))
+            for name, value in (headers or {}).items():
+                self.send_header(name, value)
             self.send_header('Cache-Control', 'no-store')
             self.send_header('X-Content-Type-Options', 'nosniff')
             self.send_header('Referrer-Policy', 'no-referrer')
@@ -46,7 +49,17 @@ def handler_for(store):
                 if url.path == '/api/datasets': return self.respond(200, store.datasets())
                 if url.path == '/api/sources': return self.respond(200, store.sources(dataset))
                 if url.path == '/api/insights': return self.respond(200, store.insights(dataset))
+                if url.path in ('/api/insights/parts', '/api/insights/parts.csv'):
+                    query = parse_qs(url.query, keep_blank_values=True)
+                    names = dict(refill_pct='refill_size_pct', refills='refills_30d', divergence='divergence_pct', min_refills='min_refills')
+                    thresholds = {field: query[param][0] for param, field in names.items() if param in query}
+                    report = store.parts_insights(dataset, thresholds)
+                    if url.path.endswith('.csv'):
+                        return self.respond(200, insights_parts.to_csv(report).encode('utf-8'), 'text/csv; charset=utf-8',
+                                            headers={'Content-Disposition': 'attachment; filename="problem-parts.csv"'})
+                    return self.respond(200, report)
                 if url.path == '/api/stock': return self.respond(200, store.stock_view(dataset))
+                if url.path == '/api/stock/presets': return self.respond(200, store.list_presets(dataset))
                 return self.respond(404, {'error': 'Not found.'})
             except ValueError as exc:
                 return self.respond(400, {'error': str(exc)})
@@ -80,6 +93,9 @@ def handler_for(store):
                 dataset = body.get('dataset')
                 if url.path == '/api/stock/available': result = store.set_available(dataset, body.get('position'), body.get('available'))
                 elif url.path == '/api/stock/settings': result = store.update_stock_settings(dataset, {k: v for k, v in body.items() if k != 'dataset'})
+                elif url.path == '/api/stock/preview': result = store.preview_settings(dataset, {k: v for k, v in body.items() if k != 'dataset'})
+                elif url.path == '/api/stock/presets': result = store.save_preset(dataset, body.get('name'), body.get('settings'))
+                elif url.path == '/api/stock/presets/delete': result = store.delete_preset(dataset, body.get('name'))
                 elif url.path == '/api/stock/lead-class': result = store.set_lead_class(dataset, body.get('position'), body.get('lead_class'))
                 elif url.path == '/api/stock/check': result = store.run_stock_check(dataset)
                 elif url.path == '/api/stock/reset': result = store.reset_stock(dataset)

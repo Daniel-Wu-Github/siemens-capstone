@@ -12,7 +12,7 @@ from statistics import median
 
 from .ingest import excel_datetime, identifier
 
-ANALYSIS_VERSION = '2.1'
+ANALYSIS_VERSION = '2.1-refills1'
 
 
 def numeric(value):
@@ -103,37 +103,8 @@ def observed_depletion(history):
     return sum(drops)/len(drops) if drops else 0.0
 
 
-def analyze(records, date_system='1900', references=None):
-    references = references or {}
-    tolerances, bom_rows = references.get('tolerances'), references.get('bom')
-    snapshots = {s['as_of']: s['rows'] for s in sorted(references.get('snapshots') or [], key=lambda s: s['as_of'])}
-    bins = records.get('BIN_STATUS_EXAMPLE', [])
-    positions = {}
-    stock_segments = {}
-    duplicate_stock_rows = missing_stock_keys = 0
-    for row in bins:
-        key = tuple(label(row.get(k)) for k in ('Material', 'Storage Type', 'Storage Bin', 'Base Unit of Measure'))
-        if not key[0] or not key[2]: missing_stock_keys += 1; continue
-        if key not in positions:
-            positions[key] = dict(id=sha256('|'.join(key).encode()).hexdigest()[:16], material=key[0],
-                                  name=label(row.get('Material Description')) or key[0], storage_type=key[1], bin=key[2],
-                                  supermarket=supermarket(key[1]) if key[1] else '',
-                                  unit=key[3], stock=0, source_rows=0, invalid_stock_rows=0,
-                                  window_transfer_quantity=0, window_transfer_events=0,
-                                  target_quantity_per_day=None, stock_to_target_days=None)
-        position = positions[key]; position['source_rows'] += 1
-        stock = numeric(row.get('Available stock'))
-        segment = key + (label(row.get('Storage Unit')), label(row.get('Special Stock Number')))
-        if segment in stock_segments:
-            duplicate_stock_rows += 1
-            if stock_segments[segment] != stock: position['invalid_stock_rows'] += 1
-            continue
-        stock_segments[segment] = stock
-        if stock is None: position['invalid_stock_rows'] += 1
-        else: position['stock'] += stock
-    for position in positions.values():
-        if position['invalid_stock_rows']: position['stock'] = None
-
+def parsed_transfers(records, date_system='1900'):
+    """Canonical validated, deduplicated transfer events and quality counts."""
     transfers, duplicates, invalid_times, missing_dates, invalid_quantities, missing_keys = [], 0, 0, 0, 0, 0
     grouped_transfers = defaultdict(list)
     for row in records.get('HISTORICAL_SM_REPLENISHMENTS', []):
@@ -155,6 +126,61 @@ def analyze(records, date_system='1900', references=None):
         transfers.append(dict(material=label(row.get('Material')), bin=label(row.get('Dest.Storage Bin')),
                               storage_type=label(row.get('Dest. Storage Type')), quantity=qty,
                               confirmed=end, hours=(end-start).total_seconds()/3600, category=transfer_category(row)))
+    return transfers, dict(duplicates=duplicates, invalid_times=invalid_times, missing_dates=missing_dates,
+                          invalid_quantities=invalid_quantities, missing_keys=missing_keys, conflicts=conflicts)
+
+
+def production_orders(rows, date_system='1900'):
+    """Canonical completed-order grouping, including final production timestamp."""
+    order_info = {}
+    for row in rows:
+        order = identifier(row.get('productionorderOrdNr'))
+        code = identifier(row.get('productionorderStatus'))
+        at = local_date(row.get('TransactionTime'), date_system)
+        if order:
+            info = order_info.setdefault(order, dict(done=False, item='', produced=None, transaction=None))
+            info['done'] = info['done'] or code == '70'
+            info['item'] = info['item'] or identifier(row.get('productionorderSalesOrderLineItem'))
+            produced = local_date(row.get('productionorderProducedTime'), date_system)
+            if produced and (info['produced'] is None or produced > info['produced']): info['produced'] = produced
+            if at and (info['transaction'] is None or at > info['transaction']): info['transaction'] = at
+    return order_info
+
+
+def analyze(records, date_system='1900', references=None):
+    references = references or {}
+    tolerances, bom_rows = references.get('tolerances'), references.get('bom')
+    snapshots = {s['as_of']: s['rows'] for s in sorted(references.get('snapshots') or [], key=lambda s: s['as_of'])}
+    bins = records.get('BIN_STATUS_EXAMPLE', [])
+    positions = {}
+    stock_segments = {}
+    duplicate_stock_rows = missing_stock_keys = 0
+    for row in bins:
+        key = tuple(label(row.get(k)) for k in ('Material', 'Storage Type', 'Storage Bin', 'Base Unit of Measure'))
+        if not key[0] or not key[2]: missing_stock_keys += 1; continue
+        if key not in positions:
+            positions[key] = dict(id=sha256('|'.join(key).encode()).hexdigest()[:16], material=key[0],
+                                  name=label(row.get('Material Description')) or key[0], storage_type=key[1], bin=key[2],
+                                  supermarket=supermarket(key[1]) if key[1] else '',
+                                  unit=key[3], stock=0, source_rows=0, invalid_stock_rows=0,
+                                  window_transfer_quantity=0, window_transfer_events=0, window_refills=[],
+                                  target_quantity_per_day=None, stock_to_target_days=None)
+        position = positions[key]; position['source_rows'] += 1
+        stock = numeric(row.get('Available stock'))
+        segment = key + (label(row.get('Storage Unit')), label(row.get('Special Stock Number')))
+        if segment in stock_segments:
+            duplicate_stock_rows += 1
+            if stock_segments[segment] != stock: position['invalid_stock_rows'] += 1
+            continue
+        stock_segments[segment] = stock
+        if stock is None: position['invalid_stock_rows'] += 1
+        else: position['stock'] += stock
+    for position in positions.values():
+        if position['invalid_stock_rows']: position['stock'] = None
+
+    transfers, transfer_quality = parsed_transfers(records, date_system)
+    duplicates, invalid_times, missing_dates, invalid_quantities, missing_keys, conflicts = (
+        transfer_quality[k] for k in ('duplicates', 'invalid_times', 'missing_dates', 'invalid_quantities', 'missing_keys', 'conflicts'))
     categories = {c: sum(e['category'] == c for e in transfers) for c in CATEGORIES}
     replen = [e for e in transfers if e['category'] == 'replenishment']
     transfer_dates = [r['confirmed'] for r in transfers]
@@ -182,12 +208,13 @@ def analyze(records, date_system='1900', references=None):
         p = candidates[0]
         p['window_transfer_quantity'] += event['quantity']
         p['window_transfer_events'] += 1
+        p['window_refills'].append(dict(date=event['confirmed'].date().isoformat(), quantity=event['quantity']))
 
     production_rows = records.get('HISTORICAL_PROD_DATA', [])
     production_dates, monthly = [], defaultdict(lambda: dict(events=0, passed=0, held=0, orders=set()))
     statuses, stations = Counter(), defaultdict(lambda: dict(events=0, held=0, durations=[]))
     orders, order_status_counts = set(), {}
-    order_info = {}
+    order_info = production_orders(production_rows, date_system)
     for row in production_rows:
         status = label(row.get('statusstringDescription')) or 'Unknown'
         statuses[status] += 1
@@ -197,13 +224,6 @@ def analyze(records, date_system='1900', references=None):
         if code:
             entry = order_status_counts.setdefault(code, dict(label=STATUS_CODES.get(code, f'Status {code}'), rows=0)); entry['rows'] += 1
         at = local_date(row.get('TransactionTime'), date_system)
-        if order:
-            info = order_info.setdefault(order, dict(done=False, item='', produced=None, transaction=None))
-            info['done'] = info['done'] or code == '70'
-            info['item'] = info['item'] or identifier(row.get('productionorderSalesOrderLineItem'))
-            produced = local_date(row.get('productionorderProducedTime'), date_system)
-            if produced and (info['produced'] is None or produced > info['produced']): info['produced'] = produced
-            if at and (info['transaction'] is None or at > info['transaction']): info['transaction'] = at
         if at:
             production_dates.append(at); m = monthly[at.strftime('%Y-%m')]
             m['events'] += 1; m['passed'] += status.lower() == 'passed'; m['held'] += status.lower() == 'on hold'
@@ -260,6 +280,7 @@ def analyze(records, date_system='1900', references=None):
     tolerance_index = {(label(r.get('Part')), label(r.get('Location'))): r for r in tolerances or []}
     for p in positions.values():
         p['window_days'] = window_days
+        p['window_refills'].sort(key=lambda refill: refill['date'])
         if p['window_transfer_events'] and p['unit'] in ('PC', 'EA') and window_days:
             rate = p['window_transfer_quantity']/window_days
             p['target_quantity_per_day'] = rate

@@ -13,6 +13,8 @@ from . import alerts as stock_alerts
 from . import proactive
 from .paths import OUTBOX
 
+SETTINGS_VERSION = 2
+
 
 def number(value, name, minimum=0, maximum=1e9):
     if isinstance(value, bool): raise ValueError(f'{name} must be a number.')
@@ -50,9 +52,17 @@ class Store:
                 CREATE TABLE IF NOT EXISTS stock_alerts(id TEXT PRIMARY KEY, dataset TEXT, position TEXT, status TEXT, payload TEXT NOT NULL);
                 CREATE UNIQUE INDEX IF NOT EXISTS open_stock_alert ON stock_alerts(dataset,position) WHERE status != 'Resolved';
                 CREATE TABLE IF NOT EXISTS stock_settings(dataset TEXT PRIMARY KEY, payload TEXT NOT NULL);
+                CREATE TABLE IF NOT EXISTS settings_presets(dataset TEXT, name TEXT, created_at TEXT, payload TEXT NOT NULL, PRIMARY KEY(dataset, name));
                 CREATE TABLE IF NOT EXISTS stock_lead_classes(dataset TEXT, position TEXT, lead_class TEXT NOT NULL, PRIMARY KEY(dataset, position));
                 CREATE TABLE IF NOT EXISTS notifications(id TEXT PRIMARY KEY, dataset TEXT, created_at TEXT, payload TEXT NOT NULL);
             ''')
+            for r in db.execute('SELECT dataset, payload FROM stock_settings').fetchall():
+                p = json.loads(r['payload'])
+                if p.get('_version', 1) < SETTINGS_VERSION:
+                    if p.get('safety_hours') == 0: p['safety_hours'] = 24.0
+                    if p.get('weights', {}).get('observed') == 1: p['weights']['observed'] = 0.0
+                    p['_version'] = SETTINGS_VERSION
+                    db.execute('UPDATE stock_settings SET payload=? WHERE dataset=?', (encoded(p), r['dataset']))
 
     @contextmanager
     def connection(self):
@@ -103,19 +113,33 @@ class Store:
             self._event(db, dataset_id, f"Imported {report['total_rows']:,} rows from four expected source sheets. Original values retained in local SQLite.")
         return dataset
 
-    def import_reference(self, dataset_id, content, filename, as_of=None):
+    def import_reference(self, dataset_id, content, filename, as_of=None, announce=True):
         report = inspect_reference(content, Path(filename).name[:120], as_of)
         with self.connection() as db:
             dataset, _ = self._dataset(db, dataset_id)
             if dataset['kind'] != 'workbook': raise ValueError('Reference files attach to an imported workbook dataset.')
+            if report.get('format') == 'daily_status':
+                tolerances = self._references(db, dataset_id)['tolerances'] or []
+                pairs = {(stock_alerts.label(r.get('Part')), stock_alerts.label(r.get('Location'))):
+                         (stock_alerts.count(r.get('Min')), stock_alerts.count(r.get('Max'))) for r in tolerances}
+                mismatches = sum((stock_alerts.label(part), stock_alerts.label(location)) in pairs and
+                                 pairs[(stock_alerts.label(part), stock_alerts.label(location))] !=
+                                 (stock_alerts.count(mn), stock_alerts.count(mx))
+                                 for part, location, mn, mx in report['daily_minmax'])
+                if mismatches:
+                    report['findings'].append(dict(code='tolerance_mismatch', severity='warning', sheet=report['sheet'],
+                                                  count=mismatches, message='Min/Max differ from the tolerance file; the tolerance file is used.'))
             db.execute('INSERT INTO "references" VALUES(?,?,?,?,?,?,?) ON CONFLICT(dataset,kind,checksum,as_of) DO UPDATE SET created_at=excluded.created_at',
                        (uuid.uuid4().hex, dataset_id, report['kind'], report['checksum'], report['as_of'] or '', now(), encoded(report['records'])))
             db.execute('DELETE FROM analysis_cache WHERE dataset=?', (dataset_id,))
             self._event(db, dataset_id, f"Reference file attached ({report['kind']}, {report['rows']:,} rows). Analytics will be recomputed.")
             # New tolerances or a newer snapshot can open or resolve alerts; announce those now, not on the next edit.
             changes = self._sync_changes(db, dataset_id)
-        self._announce(dataset_id, changes)
-        return dict(kind=report['kind'], dataset_id=dataset_id, rows=report['rows'], as_of=report['as_of'], findings=report['findings'])
+        if announce: self._announce(dataset_id, changes)
+        result = dict(kind=report['kind'], dataset_id=dataset_id, rows=report['rows'], as_of=report['as_of'],
+                      findings=report['findings'], notified=bool(announce and changes))
+        if 'format' in report: result['format'] = report['format']
+        return result
 
     def _references(self, db, dataset_id):
         refs = dict(tolerances=None, bom=None, snapshots=[])
@@ -130,7 +154,7 @@ class Store:
         with self.connection() as db:
             return db.execute('SELECT COUNT(*) FROM records WHERE dataset=?', (dataset_id,)).fetchone()[0]
 
-    def _insights(self, db, dataset_id):
+    def _insights(self, db, dataset_id, cache=True):
         """Cached workbook analysis on an open connection (no scenarios attached)."""
         dataset, quality = self._dataset(db, dataset_id)
         if dataset['kind'] != 'workbook': raise ValueError('Select an imported workbook to view source analytics.')
@@ -141,16 +165,28 @@ class Store:
             records.setdefault(row['sheet'], []).append(json.loads(row['payload']))
         result = analyze(records, quality.get('date_system', '1900'), self._references(db, dataset_id))
         result.update(dataset_id=dataset_id, source_checksum=dataset['checksum'], created_at=now())
-        db.execute('INSERT OR REPLACE INTO analysis_cache VALUES(?,?,?)', (dataset_id, ANALYSIS_VERSION, encoded(result)))
-        self._event(db, dataset_id, 'Workbook analytics saved: stock snapshot, transfer cadence, production events, and planned lines.')
+        if cache:
+            db.execute('INSERT OR REPLACE INTO analysis_cache VALUES(?,?,?)', (dataset_id, ANALYSIS_VERSION, encoded(result)))
+            self._event(db, dataset_id, 'Workbook analytics saved: stock snapshot, transfer cadence, production events, and planned lines.')
         return result
 
     def insights(self, dataset_id):
         with self.connection() as db:
             return self._insights(db, dataset_id)
 
+    def parts_insights(self, dataset_id, thresholds=None):
+        from . import insights_parts
+        thresholds = insights_parts.validate_thresholds(thresholds)
+        with self.connection() as db:
+            items = self._stock_positions(db, dataset_id)[0]
+            insights = self._insights(db, dataset_id)
+            report = insights_parts.parts_report(items, insights['inventory'], thresholds)
+            window = insights['transfers']
+        return dict(report, dataset_id=dataset_id, window_days=window['window_days'],
+                    window_start=window['window_start'], window_end=window['window_end'])
+
     # ---- Phase 1 reactive stock alerts ------------------------------------------------
-    def _stock_positions(self, db, dataset_id):
+    def _stock_positions(self, db, dataset_id, settings=None, inventory=None):
         dataset, _ = self._dataset(db, dataset_id)
         if dataset['kind'] != 'workbook': raise ValueError('Select an imported workbook to use stock alerts.')
         refs = self._references(db, dataset_id)
@@ -162,13 +198,17 @@ class Store:
         overrides = {r['position']: r['available'] for r in db.execute('SELECT position,available FROM stock_overrides WHERE dataset=?', (dataset_id,))}
         items = stock_alerts.evaluate(stock_alerts.positions(rows, refs['tolerances'], overrides), self.alert_config['rule'])
         lead_classes = {r['position']: r['lead_class'] for r in db.execute('SELECT position,lead_class FROM stock_lead_classes WHERE dataset=?', (dataset_id,))}
-        proactive.project(items, self._insights(db, dataset_id)['inventory'], self._settings(db, dataset_id), lead_classes)
+        if inventory is None: inventory = self._insights(db, dataset_id)['inventory']
+        proactive.project(items, inventory, self._settings(db, dataset_id) if settings is None else settings, lead_classes)
         return items, as_of, refs['tolerances'] is not None
 
     def _settings(self, db, dataset_id):
         row = db.execute('SELECT payload FROM stock_settings WHERE dataset=?', (dataset_id,)).fetchone()
         base = proactive.default_settings()
-        return proactive.validate_settings(base, json.loads(row['payload'])) if row else base
+        if not row: return base
+        payload = json.loads(row['payload'])
+        payload.pop('_version', None)
+        return proactive.validate_settings(base, payload)
 
     RESOLUTIONS = {'OK': 'recovered', 'No tolerance': 'minimum no longer set', 'No stock': 'no stock reading'}
 
@@ -241,7 +281,7 @@ class Store:
             open_alerts = self._open_stock_alerts(db, dataset_id)
             notes = [json.loads(r['payload']) for r in db.execute('SELECT payload FROM notifications WHERE dataset=? ORDER BY rowid DESC LIMIT 5', (dataset_id,))]
             settings = self._settings(db, dataset_id)
-        counts = dict(predicted=0, below_min=0, no_rate=0, ok=0)
+        counts = dict(predicted=0, watch=0, below_min=0, no_rate=0, ok=0)
         for p in items:
             key = {'within_lead': 'predicted'}.get(p['forecast'], p['forecast'])
             if key in counts: counts[key] += 1
@@ -312,11 +352,65 @@ class Store:
     def update_stock_settings(self, dataset_id, changes):
         def write(db):
             settings = proactive.validate_settings(self._settings(db, dataset_id), changes)
-            db.execute('INSERT INTO stock_settings VALUES(?,?) ON CONFLICT(dataset) DO UPDATE SET payload=excluded.payload', (dataset_id, encoded(settings)))
+            to_save = dict(settings, _version=SETTINGS_VERSION)
+            db.execute('INSERT INTO stock_settings VALUES(?,?) ON CONFLICT(dataset) DO UPDATE SET payload=excluded.payload', (dataset_id, encoded(to_save)))
             self._event(db, dataset_id, 'Forecast settings saved.')
             return settings
         settings, result = self._changed(dataset_id, write)
         return dict(settings=settings, **result)
+
+    def preview_settings(self, dataset_id, changes):
+        """Project candidate settings without changing settings, caches, alerts, or notifications."""
+        with self.connection() as db:
+            self._dataset(db, dataset_id)
+            current = self._settings(db, dataset_id)
+            candidate = proactive.validate_settings(current, changes)
+            # One analysis for both projections; on a cold cache it is computed but not saved.
+            inventory = self._insights(db, dataset_id, cache=False)['inventory']
+            before = self._stock_positions(db, dataset_id, settings=current, inventory=inventory)[0]
+            after = self._stock_positions(db, dataset_id, settings=candidate, inventory=inventory)[0]
+        def summary(items):
+            counts = dict(predicted=0, watch=0, below_min=0, no_rate=0, ok=0)
+            for p in items:
+                key = 'predicted' if p['forecast'] == 'within_lead' else p['forecast']
+                if key in counts: counts[key] += 1
+            return counts
+        old = {p['key']: p['forecast'] for p in before}
+        changed = [dict(key=p['key'], material=p['material'], bin=p['bin'],
+                        **{'from': old[p['key']], 'to': p['forecast']}, hours_to_min=p['hours_to_min'])
+                   for p in after if old[p['key']] != p['forecast']]
+        changed.sort(key=lambda p: (p['hours_to_min'] is None, p['hours_to_min'] or 0, p['key']))
+        return dict(current=dict(settings=current, summary=summary(before)),
+                    candidate=dict(settings=candidate, summary=summary(after)), changed=changed[:50])
+
+    @staticmethod
+    def _preset_name(name):
+        if not isinstance(name, str) or not 1 <= len(name.strip()) <= 40:
+            raise ValueError('Preset name must contain 1–40 characters.')
+        return name.strip()
+
+    def list_presets(self, dataset_id):
+        with self.connection() as db:
+            self._dataset(db, dataset_id)
+            return [dict(name=r['name'], settings=json.loads(r['payload']), created_at=r['created_at'])
+                    for r in db.execute('SELECT name,payload,created_at FROM settings_presets WHERE dataset=? ORDER BY name', (dataset_id,))]
+
+    def save_preset(self, dataset_id, name, settings):
+        name = self._preset_name(name)
+        with self.connection() as db:
+            self._dataset(db, dataset_id)
+            settings = proactive.validate_settings(self._settings(db, dataset_id), settings)
+            created_at = now()
+            db.execute('INSERT INTO settings_presets VALUES(?,?,?,?) ON CONFLICT(dataset,name) DO UPDATE SET created_at=excluded.created_at, payload=excluded.payload',
+                       (dataset_id, name, created_at, encoded(settings)))
+        return dict(name=name, settings=settings, created_at=created_at)
+
+    def delete_preset(self, dataset_id, name):
+        name = self._preset_name(name)
+        with self.connection() as db:
+            self._dataset(db, dataset_id)
+            db.execute('DELETE FROM settings_presets WHERE dataset=? AND name=?', (dataset_id, name))
+        return dict(ok=True)
 
     def set_lead_class(self, dataset_id, position, lead_class):
         if lead_class not in ('stocked', 'fab', None): raise ValueError('Lead class must be stocked or fab.')

@@ -11,19 +11,22 @@ NAN, INF = float('nan'), float('inf')
 W = dict(history=1.0, schedule=1.0, observed=1.0)
 
 
+DEFAULT_W = dict(history=1.0, schedule=1.0, observed=0.0)
+
+
 # ---------------------------------------------------------------- default_settings
-def test_default_settings_defaults_are_3_3_0():
+def test_default_settings_defaults_are_3_3_24_72():
     s = proactive.default_settings({})
-    assert (s['lead_hours_stocked'], s['lead_hours_fab'], s['safety_hours']) == (3.0, 3.0, 0.0)
-    assert s['weights'] == W and s['divergence_pct'] == 50.0
+    assert (s['lead_hours_stocked'], s['lead_hours_fab'], s['safety_hours'], s['watch_hours']) == (3.0, 3.0, 24.0, 72.0)
+    assert s['weights'] == DEFAULT_W and s['divergence_pct'] == 50.0
     assert s == proactive.DEFAULT_SETTINGS
 
 
 def test_default_settings_env_overrides():
-    s = proactive.default_settings({'LEAD_HOURS_STOCKED': '4.5', 'LEAD_HOURS_FAB': '12', 'ALERT_SAFETY_HOURS': '1.25'})
-    assert (s['lead_hours_stocked'], s['lead_hours_fab'], s['safety_hours']) == (4.5, 12.0, 1.25)
+    s = proactive.default_settings({'LEAD_HOURS_STOCKED': '4.5', 'LEAD_HOURS_FAB': '12', 'ALERT_SAFETY_HOURS': '1.25', 'ALERT_WATCH_HOURS': '48'})
+    assert (s['lead_hours_stocked'], s['lead_hours_fab'], s['safety_hours'], s['watch_hours']) == (4.5, 12.0, 1.25, 48.0)
     only = proactive.default_settings({'LEAD_HOURS_FAB': '8'})
-    assert (only['lead_hours_stocked'], only['lead_hours_fab'], only['safety_hours']) == (3.0, 8.0, 0.0)
+    assert (only['lead_hours_stocked'], only['lead_hours_fab'], only['safety_hours'], only['watch_hours']) == (3.0, 8.0, 24.0, 72.0)
 
 
 def test_default_settings_reads_os_environ_when_env_is_none(monkeypatch):
@@ -64,10 +67,10 @@ def test_validate_merges_without_mutating_current_or_aliasing_it():
 def test_validate_partial_weights_change_only_named_weights():
     cur = base()
     out = proactive.validate_settings(cur, {'weights': {'history': 0}})
-    assert out['weights'] == dict(history=0.0, schedule=1.0, observed=1.0)
+    assert out['weights'] == dict(history=0.0, schedule=1.0, observed=0.0)
     out2 = proactive.validate_settings(out, {'weights': {'schedule': 2.5, 'observed': 10}})
     assert out2['weights'] == dict(history=0.0, schedule=2.5, observed=10.0)
-    assert cur['weights'] == W
+    assert cur['weights'] == DEFAULT_W
 
 
 def test_validate_empty_changes_returns_equal_copy():
@@ -292,9 +295,10 @@ def test_project_ok_without_rate_or_with_zero_rate_is_no_rate():
 
 def test_project_within_lead_exactly_at_threshold_then_just_over():
     # rate 240/day -> hours = (available - min) / 10
-    at = run(item(available=40.0, minimum=10.0), [inv(replen=240.0)])
+    st = settings(safety_hours=0.0, watch_hours=0.0)
+    at = run(item(available=40.0, minimum=10.0), [inv(replen=240.0)], st)
     assert at['hours_to_min'] == 3.0 and at['forecast'] == 'within_lead' and at['status'] == 'Predicted'
-    over = run(item(available=41.0, minimum=10.0), [inv(replen=240.0)])
+    over = run(item(available=41.0, minimum=10.0), [inv(replen=240.0)], st)
     assert over['hours_to_min'] == 3.1 and over['forecast'] == 'ok' and over['status'] == 'OK'
     assert over['suggested_qty'] is None
 
@@ -302,16 +306,16 @@ def test_project_within_lead_exactly_at_threshold_then_just_over():
 def test_project_safety_hours_added_to_threshold_but_not_to_suggestion_lead():
     inventory = [inv(replen=240.0)]
     it = lambda: item(available=55.0, minimum=10.0, maximum=200.0)                    # 4.5 h
-    assert run(it(), inventory)['forecast'] == 'ok'
+    assert run(it(), inventory, settings(safety_hours=0.0, watch_hours=0.0))['forecast'] == 'ok'
     p = run(it(), inventory, settings(safety_hours=2.0))
     assert p['forecast'] == 'within_lead' and p['status'] == 'Predicted' and p['lead_hours'] == 3.0
     assert p['suggested_qty'] == math.ceil(200 - (55 - 240 * 3 / 24))                 # lead_hours only
     assert run(it(), inventory, settings(safety_hours=1.5))['forecast'] == 'within_lead'   # 4.5 <= 4.5
-    assert run(it(), inventory, settings(safety_hours=1.4))['forecast'] == 'ok'
+    assert run(it(), inventory, settings(safety_hours=1.4, watch_hours=0.0))['forecast'] == 'ok'
 
 
 def test_project_fab_vs_stocked_lead_hours_and_default_class():
-    st = settings(lead_hours_stocked=3.0, lead_hours_fab=10.0)
+    st = settings(lead_hours_stocked=3.0, lead_hours_fab=10.0, safety_hours=0.0, watch_hours=0.0)
     inventory = [inv(replen=240.0)]
     mk = lambda: item(available=70.0, minimum=10.0, maximum=200.0)                    # 6 h
     stocked = run(mk(), inventory, st)
@@ -373,12 +377,13 @@ def test_project_bom_status_not_ok_ignores_schedule():
 
 
 def test_project_basis_and_dropped_follow_blend():
-    p = run(item(), [inv(replen=10.0, planned=600.0, observed=5.0)])                   # schedule 20/day: 100 % > 50
+    st = settings(weights=W)
+    p = run(item(), [inv(replen=10.0, planned=600.0, observed=5.0)], st)                   # schedule 20/day: 100 % > 50
     assert p['demand_basis'] == ['schedule', 'observed'] and p['demand_dropped'] == ['history']
     assert p['demand_per_day'] == pytest.approx(12.5)
-    p = run(item(), [inv(replen=10.0, planned=300.0, observed=4.0)])                   # schedule 10/day agrees
+    p = run(item(), [inv(replen=10.0, planned=300.0, observed=4.0)], st)                   # schedule 10/day agrees
     assert p['demand_basis'] == ['history', 'schedule', 'observed'] and p['demand_per_day'] == pytest.approx(8.0)
-    p = run(item(), [inv(observed=6.0)])
+    p = run(item(), [inv(observed=6.0)], st)
     assert p['demand_basis'] == ['observed'] and p['demand_per_day'] == 6.0
 
 
@@ -403,7 +408,7 @@ def test_project_strict_rule_available_equal_min_with_ok_status_becomes_predicte
 
 
 def test_project_zero_lead_still_predicts_when_hours_to_min_is_zero():
-    st = settings(lead_hours_stocked=0.0)
+    st = settings(lead_hours_stocked=0.0, safety_hours=0.0, watch_hours=0.0)
     assert run(item(available=10.0, minimum=10.0), [inv(replen=30.0)], st)['status'] == 'Predicted'
     assert run(item(available=11.0, minimum=10.0), [inv(replen=30.0)], st)['status'] == 'OK'
 
@@ -501,3 +506,32 @@ def test_project_exposes_raw_demand_inputs_for_the_dashboard_preview():
     assert p['demand_inputs'] == dict(history=30, schedule=20.0, observed=4)
     assert run(item(), [])['demand_inputs'] == dict(history=None, schedule=None, observed=None)
     assert run(item(), [inv(planned=600, bom_status='shared')])['demand_inputs']['schedule'] is None
+
+
+def test_project_watch_tier():
+    # rate 24/day -> 1 unit/h. min 10, max 100.
+    # hours = (avail - 10). Lead 3, safety 24 -> threshold 27 h. Watch 72 h.
+    inv_row = [inv(replen=24.0)]
+    st = proactive.default_settings({})
+
+    # 20 hours: within_lead, Predicted
+    p20 = run(item(available=30.0, minimum=10.0, maximum=100.0), inv_row, st)
+    assert p20['hours_to_min'] == 20.0 and p20['forecast'] == 'within_lead' and p20['status'] == 'Predicted'
+
+    # 40 hours: watch, status OK, suggested qty not None
+    p40 = run(item(available=50.0, minimum=10.0, maximum=100.0), inv_row, st)
+    assert p40['hours_to_min'] == 40.0 and p40['forecast'] == 'watch' and p40['status'] == 'OK'
+    assert p40['suggested_qty'] is not None
+
+    # 80 hours: ok, status OK, suggested None
+    p80 = run(item(available=90.0, minimum=10.0, maximum=100.0), inv_row, st)
+    assert p80['hours_to_min'] == 80.0 and p80['forecast'] == 'ok' and p80['status'] == 'OK'
+    assert p80['suggested_qty'] is None
+
+    # watch_hours below lead + safety (e.g. 20 h < 27 h) -> no Watch ever
+    st_short = dict(st, watch_hours=20.0)
+    p_short_20 = run(item(available=30.0, minimum=10.0, maximum=100.0), inv_row, st_short)
+    assert p_short_20['forecast'] == 'within_lead'
+    p_short_28 = run(item(available=38.0, minimum=10.0, maximum=100.0), inv_row, st_short)
+    assert p_short_28['forecast'] == 'ok'
+

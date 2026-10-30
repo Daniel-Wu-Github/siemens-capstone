@@ -160,12 +160,13 @@ def inspect_workbook(content, filename):
 
 REFERENCE_KINDS = (  # (kind, required headers, retained columns), checked in this order
     ('bom', ('Item', 'Part', 'Qty'), ('Item', 'Part', 'Qty')),
+    ('daily_status', ('Part', 'Location', 'Min', 'Max', 'Live Value'), ('Part', 'Description', 'Type', 'Location', 'Min', 'Max', 'Live Value')),
     ('tolerances', ('Part', 'Location', 'Min', 'Max'), ('Part', 'Location', 'Type', 'Min', 'Max')),
     ('snapshot', ('Material', 'Storage Bin', 'Available stock'), ('Material', 'Storage Type', 'Storage Bin', 'Available stock', 'Base Unit of Measure', 'Storage Unit', 'Special Stock Number')),
 )
-REFERENCE_KEYS = dict(bom=None, tolerances=('Part', 'Location'), snapshot=('Material', 'Storage Type', 'Storage Bin', 'Storage Unit', 'Special Stock Number'))
-REFERENCE_ESSENTIAL = dict(bom=('Item', 'Part'), tolerances=('Part', 'Location'), snapshot=('Material', 'Storage Bin'))
-REFERENCE_NUMBERS = dict(bom=('Qty',), tolerances=('Min', 'Max'), snapshot=('Available stock',))
+REFERENCE_KEYS = dict(daily_status=('Part', 'Type', 'Location'), bom=None, tolerances=('Part', 'Location'), snapshot=('Material', 'Storage Type', 'Storage Bin', 'Storage Unit', 'Special Stock Number'))
+REFERENCE_ESSENTIAL = dict(daily_status=('Part', 'Location'), bom=('Item', 'Part'), tolerances=('Part', 'Location'), snapshot=('Material', 'Storage Bin'))
+REFERENCE_NUMBERS = dict(daily_status=('Live Value', 'Min', 'Max'), bom=('Qty',), tolerances=('Min', 'Max'), snapshot=('Available stock',))
 
 
 def is_full_workbook(content):
@@ -209,7 +210,16 @@ def inspect_reference(content, filename, as_of=None):
         if kind is None: continue
         if len([h for h in header if h]) != len(set(h for h in header if h)):
             raise ValueError(f'{sheet} has duplicate column headings.')
-        if kind == 'snapshot':
+        if kind == 'daily_status':
+            if as_of is None:
+                match = re.search(r'(\d{4}-\d{2}-\d{2})', filename)
+                as_of = match.group(1) if match else None
+            try:
+                if not isinstance(as_of, str) or len(as_of) != 10: raise ValueError()
+                date.fromisoformat(as_of)
+            except ValueError:
+                raise ValueError('A daily bin-status file needs a date: name it Bin_Status_YYYY-MM-DD.xlsx or pick a snapshot date.') from None
+        elif kind == 'snapshot':
             try:
                 if not isinstance(as_of, str) or len(as_of) != 10: raise ValueError()
                 date.fromisoformat(as_of)
@@ -217,6 +227,7 @@ def inspect_reference(content, filename, as_of=None):
         else: as_of = None
         keep = next(cols for k, _, cols in REFERENCE_KINDS if k == kind)
         key_fields = [k for k in (REFERENCE_KEYS[kind] or ()) if k in header]
+        daily_minmax = []
         clean, seen, counters = [], set(), dict(duplicate_key=0, missing_key=0, invalid_number=0, negative_quantity=0)
         for index, raw in enumerate(rows):
             if index >= 300000: raise ValueError('A sheet exceeds the 300,000 row limit.')
@@ -233,9 +244,17 @@ def inspect_reference(content, filename, as_of=None):
                     if not math.isfinite(n): raise ValueError()
                     if n < 0: counters['negative_quantity'] += 1
                 except (TypeError, ValueError): counters['invalid_number'] += 1
+            if kind == 'daily_status':
+                daily_minmax.append((row.get('Part'), row.get('Location'), row.get('Min'), row.get('Max')))
+                row = {'Material': row.get('Part'), 'Material Description': row.get('Description'),
+                       'Storage Type': identifier(row.get('Type')), 'Storage Bin': row.get('Location'),
+                       'Available stock': row.get('Live Value')}
             clean.append(row)
         messages = dict(duplicate_key='Repeated keys; the last row wins or quantities are added.', missing_key='Rows lack a required identifier.',
                         invalid_number='Quantity is missing or not numeric.', negative_quantity='Negative values need business review.')
         findings = [dict(code=c, severity='warning', sheet=sheet, count=n, message=messages[c]) for c, n in counters.items() if n]
-        return dict(kind=kind, filename=filename, checksum=sha256(content).hexdigest(), rows=len(clean), findings=findings, as_of=as_of, records=clean)
+        report = dict(kind=kind, filename=filename, checksum=sha256(content).hexdigest(), rows=len(clean), findings=findings, as_of=as_of, records=clean)
+        if kind == 'daily_status':
+            report.update(kind='snapshot', format='daily_status', daily_minmax=daily_minmax, sheet=sheet)
+        return report
     raise ValueError('Unrecognized reference file: expected Min/Max tolerances (Part, Location, Min, Max), a BOM (Item, Part, Qty), or a stock snapshot (Material, Storage Bin, Available stock).')

@@ -166,7 +166,7 @@ def test_missing_source_column_means_replenishment_and_no_references_is_safe():
     assert p['tolerance_flag'] == 'missing' and p['min'] is None and p['at_or_below_min'] is False and p['fill_pct'] is None
     assert p['bom_status'] == 'not_in_bom' and p['bom_qty_per_day'] is None
     assert p['snapshot_history'] == [] and p['observed_depletion_per_day'] is None
-    assert result['references']['tolerances']['matched_positions'] == 0 and result['horizon_default_hours'] == 8 and result['version'] == '2.1'
+    assert result['references']['tolerances']['matched_positions'] == 0 and result['horizon_default_hours'] == 8 and result['version'] == '2.1-refills1'
 
 
 def test_supermarket_names_and_unmapped_types():

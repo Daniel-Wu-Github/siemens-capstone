@@ -42,7 +42,7 @@ def test_empty_workspace_shows_three_pages_setup_and_points_to_data_sources(tmp_
         page.get_by_role('link', name='Predicted alerts').click()
         expect(page.get_by_text('Import a workbook first')).to_be_visible()
         page.get_by_role('link', name='Replenishment insights').click()
-        expect(page.get_by_text('Not built yet')).to_be_visible()
+        expect(page.get_by_text('Import a workbook first')).to_be_visible()
         assert not errors
         browser.close()
 

@@ -79,6 +79,37 @@ tr[data-pred]{cursor:pointer}
 #toast{position:fixed;bottom:var(--s5);right:var(--s5);background:var(--ink);color:#fff;padding:var(--s3) var(--s4);border-radius:var(--radius);box-shadow:var(--shadow-overlay);max-width:420px;font-size:var(--t-sm);z-index:10}#toast.error{background:var(--alert)}#toast[hidden]{display:none}
 .busy{cursor:progress}
 .tag.none{color:var(--muted);background:var(--sunken);border-color:var(--line-strong)}
+tr[data-part]{cursor:pointer}
+.slider-grid{display:grid;grid-template-columns:110px minmax(0,1fr) 48px;gap:var(--s2);align-items:center;margin-bottom:var(--s2);font-size:var(--t-sm)}
+.slider-grid input[type="range"]{width:100%;accent-color:var(--accent);margin:0;cursor:pointer}
+.slider-grid .val{text-align:right;font-variant-numeric:tabular-nums;color:var(--ink-2);font-weight:600}
+.chk-row{display:flex;align-items:center;gap:var(--s2);margin:var(--s2) 0 var(--s3);font-size:var(--t-sm);color:var(--ink-2)}
+.preview-table{border-collapse:collapse;width:100%;font-size:var(--t-sm);margin:var(--s2) 0}
+.preview-table th,.preview-table td{padding:var(--s1) var(--s2);border-bottom:1px solid var(--line)}
+.preview-table th{background:var(--sunken);font-size:var(--t-xs);font-weight:600;color:var(--ink-2)}
+.preset-list{margin-top:var(--s3);border-top:1px solid var(--line);padding-top:var(--s2)}
+.preset-item{display:flex;justify-content:space-between;align-items:center;gap:var(--s2);padding:var(--s2) 0;border-bottom:1px solid var(--line);font-size:var(--t-sm)}
+.preset-item:last-child{border:0}
+.th-inputs{display:flex;gap:var(--s2);align-items:center;font-size:var(--t-xs);color:var(--muted);flex-wrap:wrap;flex-basis:100%}
+.th-inputs label{white-space:nowrap}
+.tools .th-inputs input{flex:0 0 64px;width:64px;min-width:0;padding:var(--s1);font-size:var(--t-xs)}
+.rdot{display:inline-block;vertical-align:middle;margin-left:var(--s2)}
+table.parts th{white-space:normal;vertical-align:bottom}
+table.w2.stock td:nth-child(-n+2),table.w2.pred td:nth-child(-n+2){min-width:120px}
+table.pred th{white-space:normal;vertical-align:bottom}
+table.pred .hb{width:84px}
+table.sources td:last-child{white-space:normal}
+table.pred th,table.pred td,table.stock th,table.stock td{padding-left:var(--s2);padding-right:var(--s2)}
+table.w2.stock td:first-child{max-width:190px}
+table.stock td.st{white-space:normal;min-width:96px}
+table.stock td.act{white-space:normal;min-width:100px}
+table.stock td.act .btn{margin:0 0 var(--s1) var(--s1)}
+table.w2.parts td:nth-child(-n+2){min-width:110px;max-width:170px}
+table.parts td.flags{white-space:normal;min-width:96px}
+table.parts td.flags .tag{margin:0 var(--s1) var(--s1) 0;white-space:nowrap}
+.input{font:inherit;font-size:var(--t-sm);padding:var(--s1) var(--s2);min-height:32px;border:1px solid var(--line-strong);border-radius:var(--radius);background:var(--surface);min-width:0}
+.preset-form{display:flex;gap:var(--s2);margin-top:var(--s3);align-items:center}.preset-form .input{flex:1}
+.sub-h{font-weight:600;font-size:var(--t-sm);color:var(--ink-2);margin-bottom:var(--s1)}
 @media(prefers-reduced-motion:reduce){*{transition:none!important}}
 </style>
 </head>
@@ -100,6 +131,10 @@ const PER = 50;
 let view = 'stock', datasets = [], ds = null, stock = null, stockFor = null, sources = null, sourcesFor = null;
 let busy = false, toastTimer, stockFilter = 'all', stockSearch = '', stockPage = 0;
 let predFilter = 'act', predSearch = '', predPage = 0, selected = null;
+let partsData = null, partsFor = null, partsLens = 'flagged', partsSearch = '', partsPage = 0, selectedPart = null;
+let partsThresholds = {refill_pct: 50, refills: 8, divergence: 50, min_refills: 3};
+let refNote = '';
+let liveWeights = null, previewResult = null, previewTimer = null, previewSeq = 0, presets = [], presetsFor = null;
 
 function toast(message, error = false) {
   const t = $('#toast'); t.textContent = message; t.className = error ? 'error' : ''; t.hidden = false;
@@ -143,7 +178,53 @@ async function loadSources() {
   sourcesFor = requested;
   if (view === 'data') render();
 }
-function invalidate() { stock = null; stockFor = null; sources = null; sourcesFor = null; }
+async function loadPartsInsights() {
+  const requested = ds;
+  if (!requested) return;
+  const q = new URLSearchParams({
+    dataset: requested,
+    refill_pct: partsThresholds.refill_pct,
+    refills: partsThresholds.refills,
+    divergence: partsThresholds.divergence,
+    min_refills: partsThresholds.min_refills
+  });
+  try {
+    const d = await api('/api/insights/parts?' + q);
+    if (requested !== ds) return;
+    partsData = d;
+  } catch (e) {
+    if (partsData && !partsData.error && partsFor === requested) {
+      // Keep the last good report; put the inputs back to the thresholds it was computed with.
+      const t = partsData.thresholds;
+      partsThresholds = {refill_pct: t.refill_size_pct, refills: t.refills_30d, divergence: t.divergence_pct, min_refills: t.min_refills};
+      toast(e.message, true);
+      if (view === 'insights') render();
+      return;
+    }
+    partsData = {error: e.message};
+  }
+  partsFor = requested;
+  if (view === 'insights') render();
+}
+async function loadPresets() {
+  const requested = ds;
+  if (!requested) return;
+  try {
+    const d = await api('/api/stock/presets?dataset=' + encodeURIComponent(requested));
+    if (requested !== ds) return;
+    presets = d;
+  } catch (e) {
+    presets = [];
+  }
+  presetsFor = requested;
+  const el = $('#preset-list');
+  if (el) el.innerHTML = presetsHtml(presets);
+}
+function invalidate() {
+  stock = null; stockFor = null; sources = null; sourcesFor = null;
+  partsData = null; partsFor = null; presets = []; presetsFor = null;
+  previewResult = null; liveWeights = null;
+}
 
 /* ---------- shared pieces ---------- */
 function nav() {
@@ -168,8 +249,9 @@ function tierOf(p) {
   if (p.forecast === 'no_rate') return ['none', 'No rate'];
   return ['none', p.status];
 }
-function hoursBar(h, tick) {
-  const w = 140, scale = 72, x = Math.min(h, scale) / scale * w;
+function hoursBar(h, tick, scale = 72) {
+  scale = scale || 72;
+  const w = 140, x = Math.min(h, scale) / scale * w;
   const color = h <= tick ? 'var(--predicted)' : h <= scale ? 'var(--watch)' : 'var(--line-strong)';
   return `<svg class="hb" viewBox="0 0 ${w} 12" aria-hidden="true"><rect x="0" y="4" width="${w}" height="4" fill="var(--sunken)"/><rect x="0" y="4" width="${x}" height="4" fill="${color}"/><line x1="${Math.min(tick, scale) / scale * w}" x2="${Math.min(tick, scale) / scale * w}" y1="0" y2="12" stroke="var(--ink)"/></svg>`;
 }
@@ -192,8 +274,8 @@ function stockRows() {
     const a = openBy[p.key], [tc, tt] = p.status === 'Alert' ? ['alert', 'Alert'] : p.status === 'OK' ? ['ok', 'OK'] : p.status === 'Predicted' ? ['ok', 'OK'] : ['none', p.status];
     return `<tr><td>${esc(p.description || p.material)}<small>${esc(p.material)}</small></td><td>${esc(p.supermarket)}<small>${esc(p.storage_type)} / ${esc(p.bin)}</small></td>
 <td class="r"><input class="cell${p.overridden ? ' edited' : ''}" type="number" min="0" step="1" value="${p.available ?? ''}" data-stock-pos="${esc(p.key)}" aria-label="Available stock for ${esc(p.material)} ${esc(p.bin)}">${p.overridden ? `<small>source ${fmt(p.source_available)}</small>` : ''}</td>
-<td class="r">${fmt(p.min)}</td><td class="r">${fmt(p.max)}${p.note ? `<small>${esc(p.note)}</small>` : ''}</td><td>${tag(tc, tt)}${a ? `<small>${esc(a.status)} since ${esc(fmtWhen(a.created_at))}</small>` : ''}</td>
-<td class="act"><button class="btn small" data-stock-set="${esc(p.key)}">Set</button>${p.overridden ? ` <button class="btn small" data-stock-clear="${esc(p.key)}">Reset</button>` : ''}${a && a.status === 'Open' ? ` <button class="btn small" data-stock-ack="${esc(a.id)}">Acknowledge</button>` : ''}</td></tr>`;
+<td class="r">${fmt(p.min)}</td><td class="r">${fmt(p.max)}${p.note ? `<small>${esc(p.note)}</small>` : ''}</td><td class="st">${tag(tc, tt)}${a ? `<small>${esc(a.status)} since ${esc(fmtWhen(a.created_at))}</small>` : ''}</td>
+<td class="act"><button class="btn small" data-stock-set="${esc(p.key)}">Set</button>${p.overridden ? `<button class="btn small" data-stock-clear="${esc(p.key)}">Reset</button>` : ''}${a && a.status === 'Open' ? `<button class="btn small" data-stock-ack="${esc(a.id)}">Acknowledge</button>` : ''}</td></tr>`;
   }).join('') || '<tr><td colspan="7" class="empty">No positions match.</td></tr>';
   $('#stock-count').textContent = `${fmt(rows.length)} matching positions · page ${stockPage + 1} of ${pages}`;
   $('#stock-prev').disabled = stockPage === 0; $('#stock-next').disabled = stockPage >= pages - 1;
@@ -211,7 +293,7 @@ function stockPageHtml() {
     (d.tolerances_loaded ? '' : '<div class="legacy-banner">Min/Max tolerances not imported. Add the Min/Max file under Data sources to evaluate alerts.</div>') +
     strip([[fmt(sm.alerts), 'Open alerts', 'stock-alert-count'], [fmt(empty), 'Empty bins, minimum 0'], [fmt(sm.positions), 'Positions checked'], [fmt(sm.overridden), 'Simulated edits']]) +
     `<div class="cols"><section class="panel"><div class="tools"><input id="stock-search" placeholder="Search material, description, supermarket or bin" value="${esc(stockSearch)}" aria-label="Search stock positions"><select id="stock-filter" aria-label="Stock alert filter"><option value="all">All positions</option><option value="Alert">Alerts</option><option value="OK">OK</option><option value="edited">Simulated edits</option></select></div>
-<div class="tw"><table class="w2"><thead><tr><th>Material<th>Location<th class="r">Available<th class="r">Min<th class="r">Max<th>Status<th></th></tr></thead><tbody id="stock-rows"></tbody></table></div>
+<div class="tw"><table class="w2 stock"><thead><tr><th>Material<th>Location<th class="r">Available<th class="r">Min<th class="r">Max<th>Status<th></th></tr></thead><tbody id="stock-rows"></tbody></table></div>
 <div class="foot"><span id="stock-count"></span><span><button class="btn small" id="stock-prev">Previous</button> <button class="btn small" id="stock-next">Next</button></span></div></section>
 <div><section class="panel"><h2>Delivery</h2><div class="body"><dl class="kv"><dt>Email<dd>${chan}<dt>Teams<dd>${ch.teams.configured ? 'Connected' : 'Not configured'}<dt>Webhook<dd>${ch.webhook.configured ? 'Connected' : 'Not configured'}</dl><div class="note">Every change is sent once, with only the changes. Edit Available to simulate a reading; source files never change.</div></div></section>
 ${last ? `<section class="panel"><h2>Last notification</h2><div class="body"><b>${esc(last.subject)}</b><div class="note">${esc(fmtWhen(last.created_at))} · ${last.results.map(r => esc(r.channel + ': ' + r.status)).join(' · ')}</div><pre class="mail" id="mail-preview">${esc(last.text)}</pre></div></section>` : ''}</div></div>`;
@@ -283,7 +365,7 @@ function detailHtml(p, fs) {
   steps.push(['Alert threshold', `lead ${fmt(p.lead_hours, 1)} h + safety ${fmt(fs.safety_hours, 1)} h = ${fmt(tick, 1)} h`]);
   steps.push(['Suggested quantity', p.suggested_qty == null ? '—' : fmt(p.suggested_qty)]);
   const [tc, tt] = tierOf(p);
-  return `<section class="panel"><h2>${esc(p.description || p.material)} ${tag(tc, tt)}</h2><div class="body">${p.hours_to_min != null && p.demand_per_day ? projection(p, tick, 72) : '<div class="note">No projection: this position has no demand rate or is already at its minimum.</div>'}
+  return `<section class="panel"><h2>${esc(p.description || p.material)} ${tag(tc, tt)}</h2><div class="body">${p.hours_to_min != null && p.demand_per_day ? projection(p, tick, fs.watch_hours) : '<div class="note">No projection: this position has no demand rate or is already at its minimum.</div>'}
 <div class="note">${esc(p.material)} · ${esc(p.supermarket)} · ${esc(p.storage_type)} / ${esc(p.bin)}. Shaded: lead + safety window.</div></div></section>
 <section class="panel"><h2>How it was calculated</h2><div class="body">${steps.map(([a, b]) => `<div class="step"><span>${esc(a)}</span><span class="num">${esc(b)}</span></div>`).join('')}
 <div class="step"><span>Lead class</span><span><select class="cell" data-lead-pos="${esc(p.key)}" aria-label="Lead class for ${esc(p.material)} ${esc(p.bin)}"><option value="stocked"${p.lead_class === 'stocked' ? ' selected' : ''}>stocked</option><option value="fab"${p.lead_class === 'fab' ? ' selected' : ''}>fab</option></select></span></div></div></section>`;
@@ -297,16 +379,16 @@ function predPageHtml() {
   const rows = predRows(), pages = Math.max(1, Math.ceil(rows.length / PER)); predPage = Math.min(predPage, pages - 1);
   const shown = rows.slice(predPage * PER, predPage * PER + PER);
   const sel = d.positions.find(p => p.key === selected) || shown[0] || null; selected = sel ? sel.key : null;
-  const withRate = cs.below_min + cs.predicted + cs.ok;
-  return head(title, `Phase 2 · stock as of ${d.snapshot_as_of ? esc(d.snapshot_as_of) : 'undated snapshot'} · warns when hours to minimum ≤ lead time + ${fmt(fs.safety_hours)} h`) +
-    strip([[fmt(cs.predicted), 'Predicted, emailed', 'stock-predicted-count'], [fmt(cs.below_min), 'Already below minimum'], [fmt(withRate), 'Positions with a demand rate'], [fmt(cs.no_rate), 'No rate, not forecast']]) +
-    `<div class="cols"><section class="panel"><div class="tools"><input id="pred-search" placeholder="Search material, description, supermarket or bin" value="${esc(predSearch)}" aria-label="Search predicted alerts"><select id="pred-filter" aria-label="Predicted alert filter"><option value="act">Predicted and below minimum</option><option value="rate">All with a demand rate</option><option value="norate">No demand rate</option><option value="all">All positions</option></select></div>
-<div class="tw"><table class="w2"><thead><tr><th>Material<th>Location<th class="r">Available<th class="r">Min<th class="r">Demand / day<th>Hours to minimum<th>Tier</tr></thead><tbody id="pred-rows">${shown.map(p => {
+  const withRate = (cs.below_min || 0) + (cs.predicted || 0) + (cs.watch || 0) + (cs.ok || 0);
+  return head(title, `Phase 2 · stock as of ${d.snapshot_as_of ? esc(d.snapshot_as_of) : 'undated snapshot'} · ${fmt(withRate)} positions with a demand rate · warns when hours to minimum ≤ lead time + ${fmt(fs.safety_hours)} h`) +
+    strip([[fmt(cs.predicted), 'Predicted, emailed', 'stock-predicted-count'], [fmt(cs.watch), `Watch within ${fmt(fs.watch_hours)} h`, 'stock-watch-count'], [fmt(cs.below_min), 'Already below minimum'], [fmt(cs.no_rate), 'No rate, not forecast']]) +
+    `<div class="cols"><section class="panel"><div class="tools"><input id="pred-search" placeholder="Search material, description, supermarket or bin" value="${esc(predSearch)}" aria-label="Search predicted alerts"><select id="pred-filter" aria-label="Predicted alert filter"><option value="act">Predicted, Watch and below minimum</option><option value="rate">All with a demand rate</option><option value="norate">No demand rate</option><option value="all">All positions</option></select></div>
+<div class="tw"><table class="w2 pred"><thead><tr><th>Material<th>Location<th class="r">Available<th class="r">Min<th class="r">Demand / day<th>Hours to minimum<th>Tier</tr></thead><tbody id="pred-rows">${shown.map(p => {
       const [tc, tt] = tierOf(p), tick = p.lead_hours + fs.safety_hours;
-      return `<tr data-pred="${esc(p.key)}" class="${p.key === selected ? 'sel' : ''}" tabindex="0"><td>${esc(p.description || p.material)}<small>${esc(p.material)}</small></td><td>${esc(p.supermarket)}<small>${esc(p.storage_type)} / ${esc(p.bin)}</small></td><td class="r">${fmt(p.available)}</td><td class="r">${fmt(p.min)}</td><td class="r">${p.demand_per_day == null ? '—' : fmt(p.demand_per_day, 2)}</td><td>${p.hours_to_min == null ? '—' : hoursBar(p.hours_to_min, tick) + `<span class="num">${fmtHours(p.hours_to_min)}</span>`}</td><td>${tag(tc, tt)}</td></tr>`;
+      return `<tr data-pred="${esc(p.key)}" class="${p.key === selected ? 'sel' : ''}" tabindex="0"><td>${esc(p.description || p.material)}<small>${esc(p.material)}</small></td><td>${esc(p.supermarket)}<small>${esc(p.storage_type)} / ${esc(p.bin)}</small></td><td class="r">${fmt(p.available)}</td><td class="r">${fmt(p.min)}</td><td class="r">${p.demand_per_day == null ? '—' : fmt(p.demand_per_day, 2)}</td><td>${p.hours_to_min == null ? '—' : hoursBar(p.hours_to_min, tick, fs.watch_hours) + `<span class="num">${fmtHours(p.hours_to_min)}</span>`}</td><td>${tag(tc, tt)}</td></tr>`;
     }).join('') || '<tr><td colspan="7" class="empty">No positions match.</td></tr>'}</tbody></table></div>
-<div class="foot"><span>${fmt(rows.length)} matching positions · page ${predPage + 1} of ${pages}. Bar: 0 to 72 h, black tick: lead + safety.</span><span><button class="btn small" id="pred-prev"${predPage === 0 ? ' disabled' : ''}>Previous</button> <button class="btn small" id="pred-next"${predPage >= pages - 1 ? ' disabled' : ''}>Next</button></span></div></section>
-<div id="pred-detail">${detailHtml(sel, fs)}<section class="panel"><h2>Settings <a class="btn small" href="#settings">Edit</a></h2><div class="body"><dl class="kv"><dt>Lead time<dd>${fmt(fs.lead_hours_stocked, 1)} h stocked · ${fmt(fs.lead_hours_fab, 1)} h fab<dt>Safety buffer<dd>${fmt(fs.safety_hours, 1)} h<dt>Weights<dd>history ${fmt(fs.weights.history, 1)} · schedule ${fmt(fs.weights.schedule, 1)} · observed ${fmt(fs.weights.observed, 1)}<dt>Divergence<dd>${fmt(fs.divergence_pct)}%</dl></div></section></div></div>`;
+<div class="foot"><span>${fmt(rows.length)} matching positions · page ${predPage + 1} of ${pages}. Bar: 0 to ${fmt(fs.watch_hours)} h, black tick: lead + safety.</span><span><button class="btn small" id="pred-prev"${predPage === 0 ? ' disabled' : ''}>Previous</button> <button class="btn small" id="pred-next"${predPage >= pages - 1 ? ' disabled' : ''}>Next</button></span></div></section>
+<div id="pred-detail">${detailHtml(sel, fs)}<section class="panel"><h2>Settings <a class="btn small" href="#settings">Edit</a></h2><div class="body"><dl class="kv"><dt>Lead time<dd>${fmt(fs.lead_hours_stocked, 1)} h stocked · ${fmt(fs.lead_hours_fab, 1)} h fab<dt>Safety buffer<dd>${fmt(fs.safety_hours, 1)} h<dt>Watch window<dd>${fmt(fs.watch_hours, 1)} h<dt>Weights<dd>history ${fmt(fs.weights.history, 1)} · schedule ${fmt(fs.weights.schedule, 1)} · observed ${fmt(fs.weights.observed, 1)}<dt>Divergence<dd>${fmt(fs.divergence_pct)}%</dl></div></section></div></div>`;
 }
 function bindPred() {
   if (!$('#pred-rows')) return;
@@ -321,12 +403,175 @@ function bindPred() {
   $('#pred-detail').addEventListener('change', e => { if (e.target.dataset.leadPos) stockPost('/api/stock/lead-class', {position: e.target.dataset.leadPos, lead_class: e.target.value}); });
 }
 
-/* ---------- Replenishment insights (View 2): backend not built yet ---------- */
+/* ---------- Replenishment insights (View 2) ---------- */
+function refillDots(refills) {
+  if (!refills || !refills.length) return '—';
+  const w = 80, h = 14;
+  const dots = refills.map(r => {
+    const pct = Math.min(100, Math.max(0, r.pct_of_max || 0));
+    const cx = Math.round(pct / 100 * (w - 10) + 5);
+    return `<circle cx="${cx}" cy="7" r="3" fill="var(--accent)"/>`;
+  }).join('');
+  return `<svg class="rdot" viewBox="0 0 ${w} ${h}" width="${w}" height="${h}" role="img" aria-label="${refills.length} refills"><line x1="5" x2="${w - 5}" y1="7" y2="7" stroke="var(--line)"/><line x1="${w - 5}" x2="${w - 5}" y1="1" y2="13" stroke="var(--ink)" stroke-width="1.5"/>${dots}</svg>`;
+}
+function partDetailHtml(p) {
+  if (!p) return '<section class="panel"><h2>Part detail</h2><div class="body"><div class="note">Select a part to view refill history and evidence.</div></div></section>';
+  const refills = p.refills || [];
+  const W = 310, H = 140, L = 28, B = 22, T = 12, R = 10;
+  let chartSvg = '';
+  if (refills.length > 0) {
+    const n = refills.length;
+    const bw = Math.min(24, Math.max(8, (W - L - R) / n - 4));
+    const stepX = (W - L - R) / n;
+    const maxLineY = T + 10;
+    const baseY = H - B;
+    const bars = refills.map((r, i) => {
+      const pct = Math.min(100, Math.max(0, r.pct_of_max || 0));
+      const barH = (baseY - maxLineY) * (pct / 100);
+      const x = L + i * stepX + (stepX - bw) / 2;
+      const y = baseY - barH;
+      const dStr = r.date ? r.date.slice(5) : '';
+      return `<rect x="${x}" y="${y}" width="${bw}" height="${barH}" fill="var(--accent)"/><text x="${x + bw/2}" y="${y - 3}" text-anchor="middle" font-size="9">${Math.round(pct)}%</text>${i === 0 || i === n - 1 ? `<text x="${x + bw/2}" y="${H - 5}" text-anchor="middle">${esc(dStr)}</text>` : ''}`;
+    }).join('');
+    chartSvg = `<svg viewBox="0 0 ${W} ${H}" width="100%" role="img" aria-label="Refills over time as percentage of maximum">
+      <line x1="${L}" x2="${W - R}" y1="${maxLineY}" y2="${maxLineY}" stroke="var(--line-strong)" stroke-dasharray="3 3"/>
+      <text x="${W - R}" y="${maxLineY - 4}" text-anchor="end">Max (100%)</text>
+      <line x1="${L}" x2="${W - R}" y1="${baseY}" y2="${baseY}" stroke="var(--line-strong)"/>
+      <line x1="${L}" x2="${L}" y1="${maxLineY}" y2="${baseY}" stroke="var(--line-strong)"/>
+      <text x="${L - 4}" y="${maxLineY + 4}" text-anchor="end">100</text>
+      <text x="${L - 4}" y="${baseY + 4}" text-anchor="end">0</text>
+      ${bars}
+    </svg>`;
+  } else {
+    chartSvg = '<div class="note">No refills recorded in the 30-day window.</div>';
+  }
+
+  const steps = [
+    ['Refills in 30 days', fmt(p.refills_30d)],
+    ['Median refill % of Max', p.median_refill_pct != null ? `${fmt(p.median_refill_pct, 1)}%` : '—'],
+    ['Refills reaching ≥95% of Max', p.share_refills_95 != null ? `${fmt(p.share_refills_95 * 100, 0)}%` : '—'],
+    ['History demand', p.history_per_day != null ? `${fmt(p.history_per_day, 1)} / day` : '—'],
+    ['Schedule demand', p.schedule_per_day != null ? `${fmt(p.schedule_per_day, 1)} / day` : '—'],
+    ['Divergence', p.divergence_pct != null ? `${fmt(p.divergence_pct, 1)}%` : '—'],
+    ['Days under minimum', 'pending historical bin status'],
+    ['Stock limits', `Min ${fmt(p.min)} · Max ${fmt(p.max)}`]
+  ];
+
+  return `<section class="panel">
+    <h2>${esc(p.description || p.material)}</h2>
+    <div class="body">
+      <div style="margin-bottom:var(--s2)">${chartSvg}</div>
+      <div class="note">${esc(p.material)} · ${esc(p.supermarket)} · ${esc(p.storage_type)} / ${esc(p.bin)}. Bars: each refill's target quantity as % of Max.</div>
+    </div>
+  </section>
+  <section class="panel">
+    <h2>Evidence &amp; metrics</h2>
+    <div class="body">
+      ${steps.map(([l, v]) => `<div class="step"><span>${esc(l)}</span><span class="num">${esc(v)}</span></div>`).join('')}
+    </div>
+  </section>`;
+}
 function insightsPageHtml() {
-  return head(TITLES.insights, 'Planned view · backend to be specified') +
-    '<div class="legacy-banner">Not built yet. This page will list problem parts and show how far each refill reached against its maximum. No numbers are shown until the backend exists.</div>' +
-    strip([['—', 'Parts flagged'], ['—', 'Under minimum 3+ days'], ['—', 'Median refill, share of maximum'], ['—', 'Refills reaching 95% of max']]) +
-    `<section class="panel"><h2>Planned content</h2><div class="body"><ul class="plain"><li>Parts that spend days at or under minimum, with lenses for days under minimum, short refills, and schedule versus history.</li><li>Replenishments in the last 30 days and how high each refill reached as a share of Max.</li><li>A part detail with the refill history and the maximum needed for a target number of days of cover.</li></ul></div></section>`;
+  const title = TITLES.insights;
+  if (needData()) return noDataPage(title);
+  if (partsFor !== ds || !partsData) { loadPartsInsights(); return loadingPage(title); }
+  if (partsData.error) return head(title, 'Unavailable') + note('Replenishment insights unavailable', esc(partsData.error));
+
+  const d = partsData, sm = d.summary, th = d.thresholds;
+  const csvUrl = `/api/insights/parts.csv?dataset=${encodeURIComponent(ds)}&refill_pct=${th.refill_size_pct}&refills=${th.refills_30d}&divergence=${th.divergence_pct}&min_refills=${th.min_refills}`;
+  const headerActions = `<a class="btn" id="export-parts-csv" href="${csvUrl}" download="problem-parts.csv">Export CSV</a>`;
+  const subtitle = `View 2 · ${d.window_days}-day replenishment window (${esc(d.window_start || '—')} to ${esc(d.window_end || '—')}) · data steward review`;
+
+  const q = partsSearch.toLowerCase();
+  const rows = (d.parts || []).filter(p => {
+    const matchSearch = [p.material, p.description, p.supermarket, p.bin].join(' ').toLowerCase().includes(q);
+    if (!matchSearch) return false;
+    if (partsLens === 'flagged') return p.flags && p.flags.length > 0;
+    if (partsLens === 'short_refills') return p.flags && p.flags.includes('short_refills');
+    if (partsLens === 'frequent_refills') return p.flags && p.flags.includes('frequent_refills');
+    if (partsLens === 'divergent') return p.flags && p.flags.includes('divergent');
+    return true;
+  });
+
+  const pages = Math.max(1, Math.ceil(rows.length / PER));
+  partsPage = Math.min(partsPage, pages - 1);
+  const shown = rows.slice(partsPage * PER, partsPage * PER + PER);
+  const sel = (d.parts || []).find(p => p.key === selectedPart) || shown[0] || null;
+  selectedPart = sel ? sel.key : null;
+
+  const flagTag = flags => {
+    if (!flags || !flags.length) return '<span class="tag ok">OK</span>';
+    return flags.map(f => {
+      if (f === 'short_refills') return '<span class="tag alert">Short refill</span>';
+      if (f === 'frequent_refills') return '<span class="tag predicted">Frequent</span>';
+      if (f === 'divergent') return '<span class="tag watch">Divergent</span>';
+      return `<span class="tag none">${esc(f)}</span>`;
+    }).join(' ');
+  };
+
+  return head(title, subtitle, headerActions) +
+    strip([
+      [fmt(sm.flagged), 'Parts flagged', 'insights-flagged-count'],
+      [fmt(sm.short_refills), `Short refills (< ${fmt(th.refill_size_pct)}%, ≥ ${fmt(th.min_refills)} refills)`],
+      [fmt(sm.frequent_refills), `Frequent refills (> ${fmt(th.refills_30d)})`],
+      [fmt(sm.divergent), `Schedule vs history divergent (> ${fmt(th.divergence_pct)}%)`]
+    ]) +
+    `<div class="note" style="margin-bottom:var(--s4)">Days under minimum: pending until historical bin status is available. Refill size uses the transfer target quantity, not a measured receipt.</div>` +
+    `<div class="cols"><section class="panel">
+      <div class="tools" style="justify-content:space-between">
+        <div style="display:flex;gap:var(--s2);flex:1;min-width:240px">
+          <input id="insights-search" placeholder="Search material, description, supermarket or bin" value="${esc(partsSearch)}" aria-label="Search problem parts">
+          <select id="insights-lens" aria-label="Insights lens filter">
+            <option value="flagged"${partsLens === 'flagged' ? ' selected' : ''}>All flagged</option>
+            <option value="short_refills"${partsLens === 'short_refills' ? ' selected' : ''}>Short refills</option>
+            <option value="frequent_refills"${partsLens === 'frequent_refills' ? ' selected' : ''}>Frequent refills</option>
+            <option value="divergent"${partsLens === 'divergent' ? ' selected' : ''}>Schedule vs history divergent</option>
+            <option value="all"${partsLens === 'all' ? ' selected' : ''}>All parts</option>
+          </select>
+        </div>
+        <div class="th-inputs">
+          <label for="th-refill-pct">Refill %</label><input id="th-refill-pct" class="cell" type="number" min="0" max="100" step="5" value="${partsThresholds.refill_pct}" aria-label="Refill percentage threshold">
+          <label for="th-refills">Refills 30d</label><input id="th-refills" class="cell" type="number" min="0" max="100" step="1" value="${partsThresholds.refills}" aria-label="Refills count threshold">
+          <label for="th-min-refills">Min refills</label><input id="th-min-refills" class="cell" type="number" min="1" max="100" step="1" value="${partsThresholds.min_refills}" aria-label="Refills needed before a short-refill flag">
+          <label for="th-divergence">Divergence %</label><input id="th-divergence" class="cell" type="number" min="0" max="1000" step="5" value="${partsThresholds.divergence}" aria-label="Divergence percentage threshold">
+        </div>
+      </div>
+      <div class="tw"><table class="w2 parts">
+        <thead><tr><th>Material<th>Location<th>Flags<th>Refills 30 d<th class="r">Median % of Max<th class="r">History / schedule per day</tr></thead>
+        <tbody id="parts-rows">${shown.map(p => `
+          <tr data-part="${esc(p.key)}" class="${p.key === selectedPart ? 'sel' : ''}" tabindex="0">
+            <td>${esc(p.description || p.material)}<small>${esc(p.material)}</small></td>
+            <td>${esc(p.supermarket)}<small>${esc(p.storage_type)} / ${esc(p.bin)}</small></td>
+            <td class="flags">${flagTag(p.flags)}</td>
+            <td><span class="num">${fmt(p.refills_30d)}</span>${p.refills && p.refills.length ? refillDots(p.refills) : ''}</td>
+            <td class="r">${p.median_refill_pct != null ? fmt(p.median_refill_pct, 1) + '%' : '—'}</td>
+            <td class="r">${p.history_per_day != null ? fmt(p.history_per_day, 1) : '—'} / ${p.schedule_per_day != null ? fmt(p.schedule_per_day, 1) : '—'}</td>
+          </tr>
+        `).join('') || '<tr><td colspan="6" class="empty">No parts match.</td></tr>'}</tbody>
+      </table></div>
+      <div class="foot">
+        <span>${fmt(rows.length)} matching parts · page ${partsPage + 1} of ${pages}. Refill size uses the transfer target quantity, not a measured receipt.</span>
+        <span><button class="btn small" id="parts-prev"${partsPage === 0 ? ' disabled' : ''}>Previous</button> <button class="btn small" id="parts-next"${partsPage >= pages - 1 ? ' disabled' : ''}>Next</button></span>
+      </div>
+    </section>
+    <div id="part-detail">${partDetailHtml(sel)}</div></div>`;
+}
+function bindInsights() {
+  if (!$('#parts-rows')) return;
+  $('#insights-search')?.addEventListener('input', e => {
+    partsSearch = e.target.value; partsPage = 0; render();
+    const s = $('#insights-search'); s.focus(); s.setSelectionRange(s.value.length, s.value.length);
+  });
+  $('#insights-lens')?.addEventListener('change', e => { partsLens = e.target.value; partsPage = 0; render(); });
+  $('#th-refill-pct')?.addEventListener('change', e => { partsThresholds.refill_pct = Number(e.target.value); loadPartsInsights(); });
+  $('#th-refills')?.addEventListener('change', e => { partsThresholds.refills = Number(e.target.value); loadPartsInsights(); });
+  $('#th-divergence')?.addEventListener('change', e => { partsThresholds.divergence = Number(e.target.value); loadPartsInsights(); });
+  $('#th-min-refills')?.addEventListener('change', e => { partsThresholds.min_refills = Number(e.target.value); loadPartsInsights(); });
+  $('#parts-prev')?.addEventListener('click', () => { partsPage--; render(); });
+  $('#parts-next')?.addEventListener('click', () => { partsPage++; render(); });
+  const pick = tr => { if (tr) { selectedPart = tr.dataset.part; render(); } };
+  $('#parts-rows').addEventListener('click', e => pick(e.target.closest('tr[data-part]')));
+  $('#parts-rows').addEventListener('keydown', e => { if (e.key === 'Enter') pick(e.target.closest('tr[data-part]')); });
 }
 
 /* ---------- Data sources ---------- */
@@ -337,10 +582,10 @@ function refCard(refs) {
   const row = (name, ok, detail) => `<div class="step"><span>${name}</span><span>${ok ? 'Imported' : 'Not imported'}: ${detail}</span></div>`;
   return `<section class="panel"><h2>Reference files</h2><div class="body"><div class="form-row"><label for="ref-input">Reference file (XLSX or CSV, up to 32 MB)</label><input id="ref-input" type="file" accept=".xlsx,.csv"></div>
 <div class="form-row"><label for="ref-asof">Snapshot date (stock snapshots only)</label><input id="ref-asof" type="date"></div>
-<p id="ref-status" class="note" aria-live="polite">The file type is detected from its headers. Importing refreshes the analysis; source rows are unchanged.</p>
+<p id="ref-status" class="note" aria-live="polite">${refNote ? esc(refNote) : 'The file type is detected from its headers. Importing refreshes the analysis; source rows are unchanged.'}</p>
 ${row('Min/Max tolerances', t, t ? `${fmt(t.rows)} rows, ${fmt(t.matched_positions)} matched positions, ${fmt(t.zero_min)} with zero minimum, ${fmt(t.invalid)} with min > max` : 'add the Min/Max file')}
 ${row('Bill of materials', b, b ? `${fmt(b.rows)} rows, ${fmt(b.parts)} parts` : 'add the BOM file')}
-${row('Stock snapshots', sn.length, sn.length ? sn.map(s => `${esc(s.as_of || 'undated')} (${fmt(s.rows)} rows)`).join(', ') : 'add a dated bin-status file')}</div></section>`;
+${row('Stock snapshots', sn.length, sn.length ? sn.map(s => `${esc(s.as_of || 'undated')} (${fmt(s.rows)} ${s.rows === 1 ? 'row' : 'rows'})`).join(', ') : 'add a dated bin-status file')}</div></section>`;
 }
 function dataPageHtml() {
   const title = TITLES.data;
@@ -352,7 +597,7 @@ function dataPageHtml() {
   return head(title, `${esc(d.name)} · ${fmt(q.total_rows)} rows saved locally`) +
     strip([[fmt(q.total_rows), 'Persisted data rows'], [fmt(q.sheets.length), 'Source sheets'], [fmt(q.findings.length), 'Quality findings'], [fmt(sources.references.snapshots.length), 'Stock snapshots']]) +
     `<div class="cols"><div>
-<section class="panel"><h2>Source inventory</h2><div class="tw"><table><thead><tr><th>Source<th class="r">Rows<th class="r">Columns<th>Candidate grain</tr></thead><tbody>${q.sheets.map(s => `<tr><td>${esc(s.name)}<td class="r">${fmt(s.rows)}<td class="r">${s.columns}<td>${esc(s.grain)}</tr>`).join('')}</tbody></table></div></section>
+<section class="panel"><h2>Source inventory</h2><div class="tw"><table class="sources"><thead><tr><th>Source<th class="r">Rows<th class="r">Columns<th>Candidate grain</tr></thead><tbody>${q.sheets.map(s => `<tr><td>${esc(s.name)}<td class="r">${fmt(s.rows)}<td class="r">${s.columns}<td>${esc(s.grain)}</tr>`).join('')}</tbody></table></div></section>
 <section class="panel"><h2>Quality findings</h2><div class="body">${q.findings.length ? q.findings.map(f => `<div class="step"><span>${esc(f.code.replaceAll('_', ' '))}<small>${esc(f.sheet)} · ${esc(f.severity)}</small></span><span>${fmt(f.count)}: ${esc(f.message)}</span></div>`).join('') : '<div class="note">No structural findings.</div>'}</div></section>
 <section class="panel"><h2>Join coverage</h2><div class="body">${q.joins.length ? q.joins.map(j => `<div class="step"><span>${esc(j.name)}<small>${esc(j.description)}</small></span><span class="num">${fmt(j.matched)} / ${fmt(j.total)}</span></div>`).join('') : '<div class="note">None measured.</div>'}</div></section>
 <section class="panel"><h2>Recent activity</h2><div class="body">${sources.activity.map(a => `<div class="step"><span>${esc(fmtWhen(a.created_at))}</span><span>${esc(a.message)}</span></div>`).join('') || '<div class="note">None.</div>'}</div></section></div>
@@ -371,7 +616,10 @@ async function importFile(file, reference) {
     if (!res.ok) { status.textContent = r.error || 'Import failed.'; throw Error(r.error || 'Import failed.'); }
     invalidate(); await loadDatasets();
     if (!reference) ds = r.id;
-    toast(reference ? `Reference file imported (${r.kind}).` : 'Workbook imported.'); render();
+    const warnings = reference ? (r.findings || []).map(f => `${fmt(f.count)} ${f.count === 1 ? 'row' : 'rows'}: ${f.message}`) : [];
+    const kind = r.format === 'daily_status' ? 'daily bin status, saved as a snapshot' : r.kind;
+    refNote = reference ? [`Imported ${file.name} (${kind}${r.as_of ? ', ' + r.as_of : ''}).`, ...warnings].join(' ') : '';
+    toast(reference ? `Reference file imported (${kind}).${warnings.length ? ' ' + warnings.join(' ') : ''}` : 'Workbook imported.'); render();
   });
 }
 function bindData() {
@@ -380,27 +628,286 @@ function bindData() {
 }
 
 /* ---------- Settings ---------- */
+const TIER_NAMES = {within_lead: 'Predicted', watch: 'Watch', below_min: 'Alert', ok: 'OK', no_rate: 'No rate'};
+function previewHtml(res) {
+  if (!res) return '<div class="note">Move a slider to preview alert counts.</div>';
+  const cur = res.current.summary, cand = res.candidate.summary;
+  const tiers = [
+    ['Predicted', cur.predicted, cand.predicted],
+    ['Watch', cur.watch, cand.watch],
+    ['Below minimum', cur.below_min, cand.below_min],
+    ['No rate', cur.no_rate, cand.no_rate]
+  ];
+  const changed = res.changed || [];
+  return `
+    <table class="preview-table">
+      <thead><tr><th>Tier</th><th class="r">Current</th><th class="r">Preview</th></tr></thead>
+      <tbody>
+        ${tiers.map(([name, c, p]) => `<tr><td>${name}</td><td class="r">${fmt(c)}</td><td class="r"${c !== p ? ' style="font-weight:700;color:var(--accent)"' : ''}>${fmt(p)}</td></tr>`).join('')}
+      </tbody>
+    </table>
+    <div style="font-size:var(--t-xs);color:var(--muted);margin-top:var(--s2);margin-bottom:var(--s1)">
+      ${changed.length ? `Tier changes (${changed.length}${changed.length > 10 ? ', top 10 shown' : ''}):` : 'No tier changes with these weights.'}
+    </div>
+    ${changed.length ? `
+      <div class="tw"><table class="preview-table" style="font-size:var(--t-xs)">
+        <thead><tr><th>Position</th><th>Change</th><th class="r">Hours</th></tr></thead>
+        <tbody>
+          ${changed.slice(0, 10).map(ch => {
+            const fName = TIER_NAMES[ch.from] || ch.from, tName = TIER_NAMES[ch.to] || ch.to;
+            return `<tr><td>${esc(ch.material)} <small>${esc(ch.bin)}</small></td><td>${esc(fName)} → <b>${esc(tName)}</b></td><td class="r">${fmtHours(ch.hours_to_min)}</td></tr>`;
+          }).join('')}
+        </tbody>
+      </table></div>` : ''}
+  `;
+}
+
+function presetsHtml(list) {
+  if (!list || !list.length) return '<div class="note">No saved presets yet.</div>';
+  return list.map(p => `
+    <div class="preset-item">
+      <div>
+        <b>${esc(p.name)}</b>
+        <small style="display:block;color:var(--muted);font-size:var(--t-xs)">H ${fmt(p.settings.weights.history, 1)} · S ${fmt(p.settings.weights.schedule, 1)} · O ${fmt(p.settings.weights.observed, 1)} · ${fmtWhen(p.created_at)}</small>
+      </div>
+      <div class="actions">
+        <button class="btn small" data-apply-preset="${esc(p.name)}">Apply</button>
+        <button class="btn small" data-delete-preset="${esc(p.name)}">Delete</button>
+      </div>
+    </div>
+  `).join('');
+}
+
 function settingsPageHtml() {
   const title = TITLES.settings;
   if (needData()) return noDataPage(title);
   if (stockFor !== ds || !stock) { loadStock(); return loadingPage(title); }
   if (stock.error) return head(title, 'Unavailable') + note('Settings unavailable', esc(stock.error));
   const fs = stock.forecast.settings;
-  const FIELDS = [['lead_hours_stocked', 'Stocked lead time (h)', fs.lead_hours_stocked], ['lead_hours_fab', 'Fab lead time (h)', fs.lead_hours_fab], ['safety_hours', 'Safety buffer (h)', fs.safety_hours],
-    ['history', 'History weight', fs.weights.history], ['schedule', 'Schedule weight', fs.weights.schedule], ['observed', 'Observed weight', fs.weights.observed], ['divergence_pct', 'Divergence threshold (%)', fs.divergence_pct]];
+  if (presetsFor !== ds) loadPresets();
+  if (!liveWeights) {
+    liveWeights = {
+      history: fs.weights.history,
+      schedule: fs.weights.schedule,
+      observed: fs.weights.observed,
+      divergence_pct: fs.divergence_pct,
+      override_off: fs.divergence_pct >= 1000
+    };
+  }
+  const FIELDS = [
+    ['lead_hours_stocked', 'Stocked lead time (h)', fs.lead_hours_stocked],
+    ['lead_hours_fab', 'Fab lead time (h)', fs.lead_hours_fab],
+    ['safety_hours', 'Safety buffer (h)', fs.safety_hours],
+    ['watch_hours', 'Watch window (h)', fs.watch_hours],
+    ['history', 'History weight', fs.weights.history],
+    ['schedule', 'Schedule weight', fs.weights.schedule],
+    ['observed', 'Observed weight', fs.weights.observed],
+    ['divergence_pct', 'Divergence threshold (%)', fs.divergence_pct]
+  ];
   return head(title, 'Forecast settings apply to every position') +
-    `<div class="cols"><section class="panel"><h2>Forecast settings</h2><div class="body"><form id="forecast-form">${FIELDS.map(([k, l, v]) => `<div class="form-row"><label for="fc-${k}">${esc(l)}</label><input id="fc-${k}" data-fc="${k}" type="number" min="0" step="any" value="${esc(v)}"></div>`).join('')}
-<p><button class="btn primary" type="submit">Save forecast settings</button> <span id="forecast-error" class="err" role="alert"></span></p></form>
-<div class="note">A schedule that differs from history by more than the divergence threshold replaces history.</div></div></section><div></div></div>`;
+    `<div class="cols">
+      <section class="panel">
+        <h2>Forecast settings</h2>
+        <div class="body">
+          <form id="forecast-form">
+            ${FIELDS.map(([k, l, v]) => `<div class="form-row"><label for="fc-${k}">${esc(l)}</label><input id="fc-${k}" data-fc="${k}" type="number" min="0" step="any" value="${esc(v)}"></div>`).join('')}
+            <p><button class="btn primary" type="submit">Save forecast settings</button> <span id="forecast-error" class="err" role="alert"></span></p>
+          </form>
+          <div class="note">A schedule that differs from history by more than the divergence threshold replaces history.</div>
+        </div>
+      </section>
+      <section class="panel">
+        <h2>Try weights</h2>
+        <div class="body">
+          <div class="slider-grid">
+            <label for="tw-history">History</label>
+            <input id="tw-history" type="range" min="0" max="3" step="0.5" value="${liveWeights.history}" aria-label="History">
+            <span class="val" id="val-history">${fmt(liveWeights.history, 1)}</span>
+          </div>
+          <div class="slider-grid">
+            <label for="tw-schedule">Schedule</label>
+            <input id="tw-schedule" type="range" min="0" max="3" step="0.5" value="${liveWeights.schedule}" aria-label="Schedule">
+            <span class="val" id="val-schedule">${fmt(liveWeights.schedule, 1)}</span>
+          </div>
+          <div class="slider-grid">
+            <label for="tw-observed">Observed</label>
+            <input id="tw-observed" type="range" min="0" max="3" step="0.5" value="${liveWeights.observed}" aria-label="Observed">
+            <span class="val" id="val-observed">${fmt(liveWeights.observed, 1)}</span>
+          </div>
+          <div class="slider-grid">
+            <label for="tw-divergence">Divergence</label>
+            <input id="tw-divergence" type="range" min="0" max="200" step="10" value="${Math.min(200, liveWeights.divergence_pct)}" ${liveWeights.override_off ? 'disabled' : ''} aria-label="Divergence">
+            <span class="val" id="val-divergence">${liveWeights.override_off ? 'off' : fmt(liveWeights.divergence_pct) + '%'}</span>
+          </div>
+          <div class="chk-row">
+            <input id="tw-override-off" type="checkbox" ${liveWeights.override_off ? 'checked' : ''} aria-label="Turn off the override (plain average)">
+            <label for="tw-override-off">Turn off the override (plain average)</label>
+          </div>
+
+          <div id="preview-box">
+            ${previewHtml(previewResult)}
+          </div>
+
+          <p style="margin-top:var(--s3)">
+            <button class="btn primary" id="btn-apply-weights">Apply these weights</button>
+          </p>
+
+          <div class="preset-form">
+            <input id="preset-name" class="input" placeholder="Preset name" maxlength="40" aria-label="Preset name">
+            <button class="btn" id="btn-save-preset">Save as preset</button>
+          </div>
+
+          <div class="preset-list">
+            <div class="sub-h">Saved presets</div>
+            <div id="preset-list">${presetsHtml(presets)}</div>
+          </div>
+
+          <p class="note">Changes weights and thresholds, not the formula. Applied settings change real alerts and may send email.</p>
+        </div>
+      </section>
+    </div>`;
 }
+
+function triggerPreview() {
+  clearTimeout(previewTimer);
+  previewTimer = setTimeout(async () => {
+    const seq = ++previewSeq;
+    const body = {
+      dataset: ds,
+      weights: {
+        history: liveWeights.history,
+        schedule: liveWeights.schedule,
+        observed: liveWeights.observed
+      },
+      divergence_pct: liveWeights.override_off ? 1000 : liveWeights.divergence_pct
+    };
+    try {
+      const res = await api('/api/stock/preview', body);
+      if (seq !== previewSeq) return;
+      previewResult = res;
+      const box = $('#preview-box');
+      if (box) box.innerHTML = previewHtml(res);
+    } catch (e) {
+      toast(e.message, true);
+    }
+  }, 300);
+}
+
 function bindSettings() {
   $('#forecast-form')?.addEventListener('submit', async e => {
     e.preventDefault(); const err = $('#forecast-error'); err.textContent = '';
     const body = {weights: {}};
-    document.querySelectorAll('[data-fc]').forEach(i => { const k = i.dataset.fc; if (['history', 'schedule', 'observed'].includes(k)) body.weights[k] = i.value; else body[k] = i.value; });
+    document.querySelectorAll('[data-fc]').forEach(i => {
+      const k = i.dataset.fc;
+      if (['history', 'schedule', 'observed'].includes(k)) body.weights[k] = i.value;
+      else body[k] = i.value;
+    });
     if (busy) return; busy = true; document.body.classList.add('busy');
-    try { const r = await api('/api/stock/settings', {dataset: ds, ...body}); await loadStock(); toast(r && r.notification ? r.notification.subject : 'Forecast settings saved.'); }
-    catch (x) { err.textContent = x.message; } finally { busy = false; document.body.classList.remove('busy'); }
+    try {
+      const r = await api('/api/stock/settings', {dataset: ds, ...body});
+      liveWeights = null; previewResult = null;
+      await loadStock();
+      toast(r && r.notification ? r.notification.subject : 'Forecast settings saved.');
+      render();
+    } catch (x) { err.textContent = x.message; }
+    finally { busy = false; document.body.classList.remove('busy'); }
+  });
+
+  const bindSlider = (name, key, isPct) => {
+    const el = $('#tw-' + name);
+    if (!el) return;
+    el.addEventListener('input', e => {
+      const v = parseFloat(e.target.value);
+      liveWeights[key] = v;
+      const valEl = $('#val-' + name);
+      if (valEl) valEl.textContent = isPct ? fmt(v) + '%' : fmt(v, 1);
+      triggerPreview();
+    });
+  };
+  bindSlider('history', 'history', false);
+  bindSlider('schedule', 'schedule', false);
+  bindSlider('observed', 'observed', false);
+  bindSlider('divergence', 'divergence_pct', true);
+
+  $('#tw-override-off')?.addEventListener('change', e => {
+    liveWeights.override_off = e.target.checked;
+    const divInput = $('#tw-divergence'), divVal = $('#val-divergence');
+    if (divInput) divInput.disabled = liveWeights.override_off;
+    if (divVal) divVal.textContent = liveWeights.override_off ? 'off' : fmt(liveWeights.divergence_pct) + '%';
+    triggerPreview();
+  });
+
+  $('#btn-apply-weights')?.addEventListener('click', async () => {
+    const body = {
+      dataset: ds,
+      weights: {
+        history: liveWeights.history,
+        schedule: liveWeights.schedule,
+        observed: liveWeights.observed
+      },
+      divergence_pct: liveWeights.override_off ? 1000 : liveWeights.divergence_pct
+    };
+    await guarded(async () => {
+      const res = await api('/api/stock/settings', body);
+      liveWeights = null; previewResult = null;
+      await loadStock();
+      toast(res && res.notification ? res.notification.subject : 'Weights applied.');
+      render();
+    });
+  });
+
+  $('#btn-save-preset')?.addEventListener('click', async () => {
+    const nameInput = $('#preset-name');
+    const name = (nameInput ? nameInput.value : '').trim();
+    if (!name) { toast('Enter a preset name (1–40 characters).', true); return; }
+    const body = {
+      dataset: ds,
+      name: name,
+      settings: {
+        weights: {
+          history: liveWeights.history,
+          schedule: liveWeights.schedule,
+          observed: liveWeights.observed
+        },
+        divergence_pct: liveWeights.override_off ? 1000 : liveWeights.divergence_pct
+      }
+    };
+    await guarded(async () => {
+      await api('/api/stock/presets', body);
+      presets = await api('/api/stock/presets?dataset=' + encodeURIComponent(ds));
+      const el = $('#preset-list');
+      if (el) el.innerHTML = presetsHtml(presets);
+      if (nameInput) nameInput.value = '';
+      toast(`Preset "${name}" saved.`);
+    });
+  });
+
+  $('#preset-list')?.addEventListener('click', async e => {
+    const applyBtn = e.target.closest('[data-apply-preset]');
+    if (applyBtn) {
+      const name = applyBtn.dataset.applyPreset;
+      const target = presets.find(p => p.name === name);
+      if (!target) return;
+      await guarded(async () => {
+        const res = await api('/api/stock/settings', {dataset: ds, ...target.settings});
+        liveWeights = null; previewResult = null;
+        await loadStock();
+        toast(res && res.notification ? res.notification.subject : `Preset "${name}" applied.`);
+        render();
+      });
+      return;
+    }
+    const delBtn = e.target.closest('[data-delete-preset]');
+    if (delBtn && armed(delBtn, 'Click again to delete')) {
+      const name = delBtn.dataset.deletePreset;
+      await guarded(async () => {
+        await api('/api/stock/presets/delete', {dataset: ds, name: name});
+        presets = await api('/api/stock/presets?dataset=' + encodeURIComponent(ds));
+        const el = $('#preset-list');
+        if (el) el.innerHTML = presetsHtml(presets);
+        toast(`Preset "${name}" deleted.`);
+      });
+    }
   });
 }
 
@@ -409,7 +916,7 @@ function render() {
   nav();
   const html = {stock: stockPageHtml, predicted: predPageHtml, insights: insightsPageHtml, data: dataPageHtml, settings: settingsPageHtml}[view]();
   $('#main').innerHTML = html;
-  bindStock(); bindPred(); bindData(); bindSettings();
+  bindStock(); bindPred(); bindInsights(); bindData(); bindSettings();
   document.title = `${TITLES[view]} · Stock Alerts`;
 }
 document.addEventListener('click', e => {

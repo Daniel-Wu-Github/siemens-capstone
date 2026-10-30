@@ -80,14 +80,15 @@ def test_stock_view_has_forecast_block_and_position_fields(ready):
     store, ds, _ = ready
     view = store.stock_view(ds)
     assert view['forecast']['settings'] == store.stock_settings(ds)
-    assert view['forecast']['summary'] == dict(predicted=1, below_min=1, no_rate=1, ok=1)
+    assert view['forecast']['summary'] == dict(predicted=1, watch=1, below_min=1, no_rate=1, ok=0)
     p = by_material(view)['PRED']
     assert p['status'] == 'Predicted' and p['forecast'] == 'within_lead'
     assert p['lead_class'] == 'stocked' and p['lead_hours'] == 3.0
     assert p['demand_per_day'] == pytest.approx(30.0) and p['demand_basis'] == ['history'] and p['demand_dropped'] == []
     assert p['hours_to_min'] == 2.4 and p['suggested_qty'] == math.ceil(100 - (13 - 30 * 3 / 24)) == 91
     safe, norate, bm = (by_material(view)[m] for m in ('SAFE', 'NORATE', 'BM'))
-    assert (safe['status'], safe['forecast'], safe['hours_to_min']) == ('OK', 'ok', 40.0) and safe['suggested_qty'] is None
+    assert (safe['status'], safe['forecast'], safe['hours_to_min']) == ('OK', 'watch', 40.0)
+    assert safe['suggested_qty'] == math.ceil(100 - (60 - 30 * 3 / 24)) == 44
     assert (norate['status'], norate['forecast'], norate['hours_to_min']) == ('OK', 'no_rate', None)
     assert (bm['status'], bm['forecast'], bm['hours_to_min']) == ('Alert', 'below_min', 0)
     assert bm['suggested_qty'] == math.ceil(100 - (5 - 30 * 3 / 24)) == 99
@@ -103,7 +104,7 @@ def test_phase1_summary_keys_unchanged_and_ok_excludes_predicted(ready):
 def test_no_transfers_means_no_predicted_alerts(tmp_path):
     store, ds = build(tmp_path, transfers=[])
     view = store.stock_view(ds)
-    assert view['forecast']['summary'] == dict(predicted=0, below_min=1, no_rate=3, ok=0)
+    assert view['forecast']['summary'] == dict(predicted=0, watch=0, below_min=1, no_rate=3, ok=0)
     assert {a['kind'] for a in view['open_alerts']} == {'below_min'}
 
 
@@ -111,7 +112,7 @@ def test_positions_without_tolerance_have_no_forecast(tmp_path):
     store, ds = build(tmp_path, tols=[TOLS[0]])
     p = by_material(store.stock_view(ds))['SAFE']
     assert p['status'] == 'No tolerance' and p['forecast'] is None and p['hours_to_min'] is None and p['suggested_qty'] is None
-    assert store.stock_view(ds)['forecast']['summary'] == dict(predicted=1, below_min=0, no_rate=0, ok=0)
+    assert store.stock_view(ds)['forecast']['summary'] == dict(predicted=1, watch=0, below_min=0, no_rate=0, ok=0)
 
 
 # ---------------------------------------------------------------- predicted alert lifecycle
@@ -229,7 +230,7 @@ def test_update_stock_settings_changes_lead_time_opens_and_resolves_predicted(re
     safe = by_material(view)['SAFE']
     assert safe['status'] == 'Predicted' and safe['lead_hours'] == 48.0 and open_by_position(view)[SAFE]['kind'] == 'predicted'
 
-    result = store.update_stock_settings(ds, {'lead_hours_stocked': 1})
+    result = store.update_stock_settings(ds, {'lead_hours_stocked': 1, 'safety_hours': 0})
     assert n(result['resolved']) == 2                                                  # SAFE and PRED (2.4 h > 1 h)
     reasons = {r['position']: r['resolution'] for r in resolved_rows(store, ds)}
     assert reasons == {SAFE: 'forecast cleared', PRED: 'forecast cleared'}
@@ -238,7 +239,7 @@ def test_update_stock_settings_changes_lead_time_opens_and_resolves_predicted(re
 
 def test_safety_buffer_setting_widens_the_window(ready):
     store, ds, _ = ready
-    store.update_stock_settings(ds, {'lead_hours_stocked': 1})
+    store.update_stock_settings(ds, {'lead_hours_stocked': 1, 'safety_hours': 0})
     assert by_material(store.stock_view(ds))['PRED']['status'] == 'OK'
     result = store.update_stock_settings(ds, {'safety_hours': 2})                      # threshold 3 h >= 2.4 h
     assert n(result['new']) == 1
@@ -258,7 +259,8 @@ def test_settings_persist_across_store_instances(ready, tmp_path):
 def test_default_settings_when_no_row(ready):
     store, ds, _ = ready
     s = store.stock_settings(ds)
-    assert (s['lead_hours_stocked'], s['lead_hours_fab'], s['safety_hours'], s['divergence_pct']) == (3.0, 3.0, 0.0, 50.0)
+    assert (s['lead_hours_stocked'], s['lead_hours_fab'], s['safety_hours'], s['watch_hours'], s['divergence_pct']) == (3.0, 3.0, 24.0, 72.0, 50.0)
+    assert s['weights'] == {'history': 1.0, 'schedule': 1.0, 'observed': 0.0}
 
 
 def test_invalid_settings_are_rejected_and_nothing_changes(ready):
@@ -388,12 +390,23 @@ def test_new_tables_exist_and_source_records_untouched(ready):
         assert before == [r['payload'] for r in db.execute('SELECT payload FROM records WHERE dataset=? ORDER BY sheet,row_number', (ds,))]
 
 
+def test_watch_position_opens_no_alert_and_sends_no_email(ready):
+    store, ds, outbox = ready
+    view = store.stock_view(ds)
+    assert view['forecast']['summary']['watch'] == 1
+    safe = by_material(view)['SAFE']
+    assert safe['status'] == 'OK' and safe['forecast'] == 'watch' and safe['hours_to_min'] == 40.0
+    assert safe['suggested_qty'] == 44
+    assert SAFE not in open_by_position(view)
+    assert eml_count(outbox) == 1
+
+
 # ---------------------------------------------------------------- HTTP
 def test_http_stock_view_exposes_forecast(ready):
     store, ds, _ = ready
     with serving(store) as base:
         status, view = call(base, f'/api/stock?dataset={ds}')
-        assert status == 200 and view['forecast']['summary'] == dict(predicted=1, below_min=1, no_rate=1, ok=1)
+        assert status == 200 and view['forecast']['summary'] == dict(predicted=1, watch=1, below_min=1, no_rate=1, ok=0)
         assert set(view['summary']) == {'positions', 'alerts', 'ok', 'no_tolerance', 'overridden'}
 
 
