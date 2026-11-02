@@ -429,6 +429,21 @@ class Store:
         return dict(new=len(changes['new']) if changes else 0, resolved=len(changes['resolved']) if changes else 0,
                     notification=self._announce(dataset_id, changes), checked_at=now())
 
+    def acknowledge_all_stock_alerts(self, dataset_id):
+        """Acknowledge every open below-minimum alert. Predicted alerts and simulated stock are left untouched; nothing is sent."""
+        with self.connection() as db:
+            dataset, _ = self._dataset(db, dataset_id)
+            if dataset['kind'] != 'workbook': raise ValueError('Select an imported workbook to use stock alerts.')
+            count = 0
+            for row in db.execute("SELECT * FROM stock_alerts WHERE dataset=? AND status='Open'", (dataset_id,)).fetchall():
+                payload = json.loads(row['payload'])
+                if payload.get('kind', 'below_min') != 'below_min': continue
+                payload.update(status='Acknowledged', acknowledged_at=now())
+                db.execute("UPDATE stock_alerts SET status='Acknowledged', payload=? WHERE id=?", (encoded(payload), row['id']))
+                count += 1
+            if count: self._event(db, dataset_id, f'{count} below-minimum stock alert(s) acknowledged together.')
+        return dict(acknowledged=count)
+
     def acknowledge_stock_alert(self, alert_id):
         with self.connection() as db:
             row = db.execute('SELECT * FROM stock_alerts WHERE id=?', (alert_id,)).fetchone()

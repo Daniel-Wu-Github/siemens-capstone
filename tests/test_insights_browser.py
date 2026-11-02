@@ -55,7 +55,7 @@ def test_insights_page_strip_table_lens_thresholds_and_detail(tmp_path, clean_en
             expect(detail).to_contain_text('Evidence & metrics')
 
         # Lens filter
-        page.locator('#insights-lens').select_option(label='All parts')
+        page.locator('#flag-all').click()
         expect(page.locator('#parts-rows tr')).not_to_have_count(0)
 
         # Threshold change re-queries API

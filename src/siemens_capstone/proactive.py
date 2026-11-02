@@ -69,6 +69,23 @@ def blend_rate(history, schedule, observed, weights, divergence_pct):
     return dict(rate=sum(weights[n] * live[n] for n in used) / total if used else None, used=used, dropped=dropped)
 
 
+NO_RATE_REASONS = dict(
+    not_in_bom='No transfers in the last 30 days and the part is not in the BOM, so there is no schedule.',
+    shared_bom='No transfers in the last 30 days and the part is shared by several positions, so its schedule is not split.',
+    nothing_planned='No transfers in the last 30 days and nothing is scheduled for this part.',
+    zero_rate='Demand rate is zero.',
+    unweighted='Only the observed depletion has data and its weight is 0.')
+
+
+def no_rate_reason(inputs, bom_status, weights):
+    """Why a position has no demand rate. Descriptive only: it never changes a rate or a tier."""
+    if _ok(inputs.get('history')): return 'zero_rate'
+    if bom_status == 'not_in_bom': return 'not_in_bom'
+    if bom_status == 'shared': return 'shared_bom'
+    if bom_status == 'ok': return 'nothing_planned'
+    return 'unweighted' if _ok(inputs.get('observed')) else 'not_in_bom'
+
+
 def project(items, inventory, settings, lead_classes=None, rule_status_key='status'):
     lead_classes = lead_classes or {}
     rows = {position_key(r.get('material'), r.get('storage_type'), r.get('bin')): r for r in inventory or []}
@@ -89,7 +106,7 @@ def project(items, inventory, settings, lead_classes=None, rule_status_key='stat
         if status == 'Alert':
             p['forecast'], p['hours_to_min'] = 'below_min', 0
         elif not rate:
-            p['forecast'] = 'no_rate'; continue
+            p['forecast'] = 'no_rate'; p['no_rate_reason'] = no_rate_reason(inputs, row.get('bom_status'), weights); continue
         else:
             hours = max(0, p['available'] - p['min']) / rate * 24
             p['hours_to_min'] = round(hours, 2)

@@ -42,6 +42,7 @@ All source records are kept locally. Original imported row records are not share
 | GET | `/api/insights/parts?dataset=ID` | Per-position refill evidence, flags (`short_refills`, `frequent_refills`, `divergent`) and summary; optional `refill_pct` (0–100), `refills` (0–100), `divergence` (0–1000), `min_refills` (1–100, default 3: refills needed before a short-refill flag) query overrides |
 | GET | `/api/insights/parts.csv?dataset=ID` | Same thresholds, flattened CSV attachment `problem-parts.csv` |
 | POST | `/api/stock/preview` | `{dataset, ...settings}` → current/candidate settings and tier counts (`predicted`, `watch`, `below_min`, `no_rate`, `ok`), plus at most 50 tier changes sorted by candidate hours; no writes or delivery |
+| POST | `/api/stock/ack-all` | `{dataset}` → `{acknowledged}`; acknowledges every open below-minimum alert. Predicted alerts, simulated stock and delivery are untouched |
 | GET | `/api/stock/presets?dataset=ID` | Saved presets as `{name, settings, created_at}` records |
 | POST | `/api/stock/presets` | `{dataset, name, settings}` saves or replaces a trimmed 1–40 character name; settings validated against current values |
 | POST | `/api/stock/presets/delete` | `{dataset, name}` deletes a preset; apply via the existing stock settings route |

@@ -100,6 +100,7 @@ def handler_for(store):
                 elif url.path == '/api/stock/check': result = store.run_stock_check(dataset)
                 elif url.path == '/api/stock/reset': result = store.reset_stock(dataset)
                 elif url.path == '/api/stock/digest': result = store.stock_digest(dataset)
+                elif url.path == '/api/stock/ack-all': result = store.acknowledge_all_stock_alerts(dataset)
                 elif url.path == '/api/stock/ack': result = store.acknowledge_stock_alert(body.get('id'))
                 else: return self.respond(404, {'error': 'Not found.'})
                 return self.respond(200, result if result is not None else {'ok': True})

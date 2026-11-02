@@ -329,11 +329,29 @@ def test_replenishment_insights_every_control(tmp_path):
         expect(rows(page, body).filter(has_text='BDIV')).to_contain_text('Divergent')
         expect(rows(page, body).filter(has_text='BDIV')).to_contain_text('30 / 60')
 
-        for lens, material in (('short_refills', 'BSHORT'), ('frequent_refills', 'BFREQ'), ('divergent', 'BDIV')):
-            page.locator('#insights-lens').select_option(lens)
+        # Legend explains each flag with the live thresholds.
+        legend = page.locator('.legend')
+        expect(legend).to_contain_text('under 50% of the bin')
+        expect(legend).to_contain_text('More than 8 refills')
+        expect(legend).to_contain_text('differ by more than 50%')
+        chip = lambda f: page.locator(f'#flag-chips [data-flag="{f}"]')
+        expect(page.locator('#flag-hint')).to_contain_text('No flag selected')
+        for flag, material in (('short_refills', 'BSHORT'), ('frequent_refills', 'BFREQ'), ('divergent', 'BDIV')):
+            chip(flag).click()
+            expect(chip(flag)).to_have_attribute('aria-pressed', 'true')
+            expect(chip(flag)).to_be_focused()
             expect(rows(page, body)).to_have_count(1)
             expect(rows(page, body).first).to_contain_text(material)
-        page.locator('#insights-lens').select_option('all')
+            chip(flag).click()
+            expect(chip(flag)).to_have_attribute('aria-pressed', 'false')
+        # Any selected flag: two chips show the union.
+        chip('short_refills').click(); chip('divergent').click()
+        expect(rows(page, body)).to_have_count(2)
+        expect(page.locator('#flag-hint')).to_contain_text('any selected flag')
+        chip('short_refills').click(); chip('divergent').click()
+        expect(rows(page, body)).to_have_count(3)
+        page.locator('#flag-all').click()
+        expect(chip('divergent')).to_be_disabled()
         expect(page.locator('.foot')).to_contain_text('63 matching parts · page 1 of 2')
         page.locator('#parts-next').click()
         expect(rows(page, body)).to_have_count(13)
@@ -350,7 +368,8 @@ def test_replenishment_insights_every_control(tmp_path):
         expect(detail.locator('svg rect')).to_have_count(3)  # one bar per refill
         expect(detail).to_contain_text('Median refill % of Max10%')
         page.locator('#insights-search').fill('')
-        page.locator('#insights-lens').select_option('flagged')
+        page.locator('#flag-all').click()
+        expect(page.locator('#flag-hint')).to_contain_text('No flag selected')
         freq = rows(page, body).filter(has_text='BFREQ')
         freq.focus(); freq.press('Enter')
         expect(detail).to_contain_text('Refills in 30 days9')
@@ -502,4 +521,150 @@ def test_every_page_and_table_fits_at_desktop_widths(tmp_path, width, height):
             assert page.evaluate('document.documentElement.scrollWidth <= innerWidth'), name
             clipped = page.evaluate("[...document.querySelectorAll('.tw')].filter(t => t.scrollWidth > t.clientWidth + 1).length")
             assert clipped == 0, f'{name}: a table needs sideways scrolling at {width}px'
+        s.close()
+
+
+# ---------------------------------------------------------------- clear all, sorting, no-rate reasons, live settings
+@pytest.mark.browser
+def test_stock_clear_all_and_column_sorting(tmp_path):
+    mails = lambda: len(list((tmp_path / 'outbox').glob('*.eml')))
+    with running_server(tmp_path) as base, sync_playwright() as p:
+        s = Session(p); page = s.page
+        ds = seed(page, base)
+        page.goto(base + '/#stock')
+        body, first = '#stock-rows', lambda: rows(page, '#stock-rows').first
+        header = lambda key: page.locator(f'#stock-head th:has(button[data-sort="{key}"])')
+        order = lambda: page.evaluate("[...document.querySelectorAll('#stock-rows tr')].map(r => r.querySelector('td').innerText.replace('\\n', ' ').toLowerCase())")
+
+        # Default order puts the Alert first; no column claims to be sorted.
+        expect(first()).to_contain_text('BM')
+        assert page.locator('#stock-head th[aria-sort="ascending"], #stock-head th[aria-sort="descending"]').count() == 0
+
+        # Material: ascending, descending, then back to the default. aria-sort follows the state and focus stays on the button.
+        page.locator('[data-sort="material"]').click()
+        expect(header('material')).to_have_attribute('aria-sort', 'ascending')
+        expect(page.locator('[data-sort="material"]')).to_be_focused()
+        names = order(); assert names == sorted(names) and len(names) == 50
+        page.locator('[data-sort="material"]').click()
+        expect(header('material')).to_have_attribute('aria-sort', 'descending')
+        names = order(); assert names == sorted(names, reverse=True)
+        page.locator('[data-sort="material"]').click()
+        expect(header('material')).to_have_attribute('aria-sort', 'none')
+        expect(first()).to_contain_text('BM')
+
+        # Max: ascending puts DIV (1000) last and FAR (300) before it; only one column is sorted at a time.
+        page.locator('[data-sort="max"]').click()
+        page.locator('[data-sort="status"]').click()
+        assert page.locator('#stock-head th[aria-sort="ascending"]').count() == 1
+        expect(header('status')).to_have_attribute('aria-sort', 'ascending')
+        page.locator('[data-sort="max"]').press('Enter')
+        page.locator('[data-sort="max"]').press('Enter')
+        expect(header('max')).to_have_attribute('aria-sort', 'descending')
+        page.locator('#stock-search').fill('B')
+        expect(first()).to_contain_text('BDIV')                    # sort survives a search
+        page.locator('#stock-search').fill('')
+        page.locator('#stock-next').click()
+        expect(header('max')).to_have_attribute('aria-sort', 'descending')  # and paging
+        page.locator('#stock-prev').click()
+
+        # Min ascending and Location sorting.
+        page.locator('[data-sort="min"]').click()
+        expect(header('min')).to_have_attribute('aria-sort', 'ascending')
+        page.locator('[data-sort="location"]').click()
+        expect(header('location')).to_have_attribute('aria-sort', 'ascending')
+        page.locator('[data-sort="location"]').click(); page.locator('[data-sort="location"]').click()
+        expect(header('location')).to_have_attribute('aria-sort', 'none')
+
+        # Clear all alerts: needs a second click; changes alert state only.
+        page.locator('[data-stock-pos]').first.fill('1')            # no-op until Set; make a real edit through the API instead
+        page.request.post(base + '/api/stock/available', data={'dataset': ds, 'position': 'FAR|401|BFAR', 'available': 190})
+        page.reload()
+        before = mails()
+        button = page.locator('#clear-alerts')
+        expect(button).to_be_enabled()
+        button.click()
+        expect(button).to_have_text('Click again to clear 1')
+        page.wait_for_timeout(100)
+        open_ = lambda: [(a['material'], a['status']) for a in page.request.get(base + f'/api/stock?dataset={ds}').json()['open_alerts']]
+        assert ('BM', 'Open') in open_()                             # first click changed nothing
+        button.click()
+        expect(page.locator('#toast')).to_contain_text('1 alert(s) cleared. Stock levels unchanged.')
+        assert ('BM', 'Acknowledged') in open_() and ('PRED', 'Open') in open_()  # predicted alert is not cleared
+        expect(button).to_be_disabled()
+        expect(page.locator('.strip')).to_contain_text('Simulated edits')
+        stock = page.request.get(base + f'/api/stock?dataset={ds}').json()
+        assert stock['summary']['overridden'] == 1 and stock['summary']['alerts'] == 1   # stock and the position's Alert status unchanged
+        assert mails() == before
+        s.close()
+
+
+@pytest.mark.browser
+def test_predicted_explains_no_rate_positions(tmp_path):
+    with running_server(tmp_path) as base, sync_playwright() as p:
+        s = Session(p); page = s.page
+        seed(page, base)
+        page.goto(base + '/#predicted')
+        why = page.locator('#no-rate-why')
+        expect(why).to_contain_text('Why 56 positions have no rate')
+        expect(why).to_contain_text('56 Not in BOM, no transfers')
+        expect(why).to_contain_text('Observed depletion is not used (weight 0)')
+        page.locator('#pred-filter').select_option('norate')
+        expect(rows(page, '#pred-rows').first).to_contain_text('Not in BOM, no transfers')
+        expect(page.locator('#pred-rows .why')).to_have_count(50)
+        s.close()
+
+
+@pytest.mark.browser
+def test_settings_formulas_and_tier_counter_update_live_with_unsaved_values(tmp_path):
+    with running_server(tmp_path) as base, sync_playwright() as p:
+        s = Session(p); page = s.page
+        ds = seed(page, base)
+        page.goto(base + '/#settings')
+        count = lambda tier: page.locator(f'#tier-counter [data-tier="{tier}"] b')
+        formulas = page.locator('#formulas-live')
+        for tier, n in (('below_min', '1'), ('predicted', '1'), ('watch', '2'), ('ok', '3'), ('no_rate', '56')):
+            expect(count(tier)).to_have_text(n)
+        expect(formulas).to_contain_text('demand = (1 × history + 1 × schedule) / (1 + 1)')
+        expect(formulas).to_contain_text('If |schedule − history| / history × 100 > 50, history is dropped')
+        expect(formulas).to_contain_text('hours_to_min = max(0, available − min) / demand × 24')
+        expect(formulas).to_contain_text('available ≤ min')
+        expect(formulas).to_contain_text('stocked 3 + 24 = 27 h, fab 3 + 24 = 27 h')
+        expect(formulas).to_contain_text('hours_to_min ≤ 72 h')
+        expect(formulas).to_contain_text('ceil(max − (available − demand × lead / 24))')
+
+        # An unsaved lead time updates the formulas and the counters.
+        page.locator('#fc-lead_hours_stocked').fill('100')
+        expect(formulas).to_contain_text('stocked 100 + 24 = 124 h')
+        expect(count('predicted')).to_have_text('3')
+        expect(count('watch')).to_have_text('0')
+        expect(page.locator('#tier-counter [data-tier="predicted"]')).to_contain_text('+2')
+        expect(page.locator('#tier-counter [data-tier="watch"]')).to_contain_text('−2')
+        assert settings_of(page, base, ds)['lead_hours_stocked'] == 3          # nothing was saved
+
+        # Watch window and safety buffer feed the formulas too.
+        page.locator('#fc-lead_hours_stocked').fill('3')
+        page.locator('#fc-watch_hours').fill('10')
+        expect(formulas).to_contain_text('hours_to_min ≤ 10 h')
+        expect(count('watch')).to_have_text('0')
+        page.locator('#fc-watch_hours').fill('72')
+
+        # Weights: a slider moves its form field, and typing in the field moves the slider.
+        page.locator('#tw-schedule').fill('0'); page.locator('#tw-schedule').dispatch_event('input')
+        expect(page.locator('#fc-schedule')).to_have_value('0')
+        expect(formulas).to_contain_text('demand = (1 × history) / (1)')
+        page.locator('#fc-history').fill('2')
+        expect(page.locator('#tw-history')).to_have_value('2')
+        expect(page.locator('#val-history')).to_have_text('2')
+        expect(formulas).to_contain_text('demand = (2 × history) / (2)')
+        page.locator('#tw-override-off').check()
+        expect(formulas).to_contain_text('The override is off')
+        page.locator('#tw-override-off').uncheck()
+        page.locator('#fc-history').fill('1'); page.locator('#fc-schedule').fill('1')
+
+        # An invalid field pauses the preview instead of raising an error.
+        page.locator('#fc-safety_hours').fill('')
+        expect(page.locator('#preview-box')).to_contain_text('Enter a number of zero or more')
+        page.locator('#fc-safety_hours').fill('24')
+        expect(page.locator('#preview-box')).to_contain_text('Alert (below minimum)')
+        expect(count('predicted')).to_have_text('1')
         s.close()
