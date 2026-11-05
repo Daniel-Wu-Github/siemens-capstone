@@ -1,119 +1,69 @@
 # Siemens Capstone: Proactive Material Replenishment
 
-This Texas A&M CSCE 482 capstone explores how to warn warehouse staff before materials in factory floor supermarkets run out. The intended outcome is fewer production interruptions caused by reactive replenishment. Siemens Digitalization and Data sponsors the project.
+Texas A&M CSCE 482 capstone for Siemens Digitalization and Data. The prototype warns warehouse staff before supermarket bins run out: it flags bins already below minimum, predicts which bins will get there soon, and shows which parts have replenishment problems. It runs on one computer, in a browser, from one database file.
 
-## Run the prototype
+## Quick start (UAT build)
 
-The prototype has one frontend file, `index.html`, with all styling, JavaScript, and SVG charts embedded. A local Python server supplies the API and persists imported workbooks, reference files, stock alerts, settings, presets, and notifications in SQLite.
+**You need:** Python 3.11 or newer, and the files from the zip in one folder: `index.html`, `server.py`, `src/`, `requirements.txt`, `run.bat`, `run.sh`, this README, and `siemens_uat.sqlite3` (the database, in the same folder as this README).
 
-Requires Python 3.11 or newer. From this repository:
+**Start it**
 
-```sh
-python3 -m venv .venv
-.venv/bin/python -m pip install -r requirements.txt
-.venv/bin/python server.py
+- **Windows:** double-click `run.bat`.
+- **Mac / Linux:** open a terminal in this folder and run `sh run.sh`.
+
+The first start creates a private `.venv` folder and installs one package (`openpyxl`), which needs internet access or an internal pip mirror. Later starts take a few seconds. Your browser opens **http://127.0.0.1:8765**. Keep the black window open while testing; close it, or press Ctrl+C, to stop. Your edits are kept in the database file.
+
+**Options** (both scripts take the same two optional arguments):
+
+```
+run.bat                              database siemens_uat.sqlite3 in this folder, port 8765
+run.bat my_copy.sqlite3              a different database file
+run.bat siemens_uat.sqlite3 8766     a different port
 ```
 
-On Windows (PowerShell or Command Prompt) use the venv's `Scripts` folder instead:
+If a script cannot be used, run it by hand after `python -m venv .venv` and `pip install -r requirements.txt` (use `.venv\Scripts\python` on Windows, `.venv/bin/python` elsewhere): `python server.py --db siemens_uat.sqlite3`.
 
-```bat
-py -3.11 -m venv .venv
-.venv\Scripts\python -m pip install -r requirements.txt
-.venv\Scripts\python server.py
-```
+**Five-minute tour** (left menu)
 
-Open **http://127.0.0.1:8765**. If that port is busy the server says so; start it on another port with `server.py --port 8766` and open that address. The server listens on this computer only and has no login, so do not expose it to a network. Nothing is emailed unless SMTP settings are configured (see [docs/alerts.md](docs/alerts.md)); without them every notification is saved as a file under `outputs/outbox`. If your system Python is older, use `uv venv --python 3.11` followed by `uv pip install --python .venv/bin/python -r requirements.txt` instead.
+1. **Stock alerts:** every bin with its stock, minimum and maximum. Click a column heading to sort, use the search box and filter. Type a lower number in *Available* and press Enter (or *Set*) to simulate a breach: an alert opens and an email is saved as a file in `outputs/outbox` (nothing is emailed). *Reset* on a row, or *Reset simulated stock*, puts it back. *Acknowledge all below-minimum* marks the open below-minimum alerts as seen without changing stock.
+2. **Predicted alerts:** bins forecast to reach their minimum within lead time + safety buffer (Predicted), and within 72 hours (Watch). Click a row to see how it was calculated. Positions with no demand history show why they have no rate.
+3. **Replenishment insights:** parts with replenishment problems. Click the flag buttons (short refills, frequent refills, divergent) to filter; change the thresholds live; export CSV.
+4. **Data sources:** import the Siemens workbook and reference files (Min/Max, BOM, daily bin status named `Bin_Status_YYYY-MM-DD.xlsx`). Already loaded in the supplied database.
+5. **Settings:** lead times, safety buffer, watch window and the **history share** slider (schedule gets the rest). The formulas and the tier counters update live before you save. Presets can be saved and applied.
 
-The app has three main pages and two setup pages:
-- **Stock alerts** (Phase 1): Lists bins at or below their minimum tolerance and dispatches alerts.
-- **Predicted alerts** (Phase 2): Forecasts which bins will reach their minimum within lead time plus safety buffer, provides a Watch tier for early warehouse visibility, and shows how each calculation is derived.
-- **Replenishment insights** (View 2): Evaluates problem replenishment positions with refill metrics, divergence analysis between transfer cadence and production schedule, problem lenses (short refills, frequent refills, schedule divergence), and CSV export.
-- **Data sources**: Imports the 4-sheet workbook and attaches reference files (Min/Max tolerances, BOM, dated bin-status snapshots).
-- **Settings**: Configures forecast parameters, lead times, safety buffer, watch window, and includes the interactive **Try weights** slider panel with debounced live preview and saved presets.
+## How the numbers work
 
-The UI design system is described in [docs/frontend_design_system.md](docs/frontend_design_system.md).
+- Demand per day = history share × history rate + schedule share × schedule rate. Default is history 2 : schedule 1 with the "differs by more than X %" override switched off (Settings). The history rate comes from the replenishment transfer log; the schedule rate from planned production × BOM / 30.
+- Hours to minimum = max(0, available − min) / demand × 24.
+- **Alert:** available ≤ min. **Predicted:** hours ≤ lead time + safety buffer (3 h + 24 h by default). **Watch:** hours ≤ 72 (dashboard only).
+- Suggested quantity = ceil(max − (available − demand × lead / 24)).
+- Positions without history or schedule are shown as "No rate" and are not forecast.
 
-On first launch the workspace is empty: open **Data sources**, import the workbook, then attach reference files. The earlier synthetic sandbox, overview, materials, model evaluation, workbook insights, and part forecast pages were retired; their code is kept for review in `legacy_for_deletion/` (see its `MANIFEST.md`) and is not run by the app or tests.
+## Know before you test
 
-The forecast is an estimate from recorded transfer quantities, not measured consumption. It has not been validated against real stockouts.
+- The forecast is an estimate from recorded transfer quantities, not measured consumption. It has not been checked against real stockouts, because no historical bin status exists.
+- The default blend and the 3 h lead time are team proposals awaiting sponsor confirmation. Please give feedback on them.
+- Notifications are saved as files unless email or Teams is configured (see below). Simulated stock edits never change the source files.
+- The server listens on this computer only and has no login. Do not expose it to a network.
 
-## Data and output locations
+## Troubleshooting
 
-- `data/`: the single local data folder, ignored by Git. Place the Siemens workbooks here (`Prod_Capstone_Data.xlsx`, `Min_Max-SM.xlsx`, `BOMEXAMPLE.xlsx`, `Most_Replen_Summer.xlsx`); the real-file tests read them from this folder and skip when they are absent.
-- `data/capstone.sqlite3`: persistent local database, ignored by Git. Closing the server does not erase it.
-- `artifacts/`: screenshots produced by browser tests, ignored by Git.
-- `handoff.md`: detailed local plan and implementation handoff, always ignored by Git.
+- **"Python was not found":** install Python 3.11+ from python.org (tick "Add to PATH"), or ask IT for a managed install.
+- **pip cannot download:** point pip at your internal mirror (`pip config set global.index-url ...`) or send the error to the team.
+- **"Cannot listen on port 8765":** another program uses it. Start with another port: `run.bat siemens_uat.sqlite3 8766`.
+- **"Database not found":** put `siemens_uat.sqlite3` next to `run.bat`, or pass its path as the first argument. The script never creates an empty one.
+- **Blank page or "unavailable":** the black window must still be open; reload the page.
 
-To ingest a local workbook at startup:
+## Optional: real email, Teams or webhook delivery
 
-```sh
-.venv/bin/python server.py --import-workbook data/Prod_Capstone_Data.xlsx --attach data/Min_Max-SM.xlsx --attach data/BOMEXAMPLE.xlsx
-```
+Set environment variables before starting (they are read at start-up): `SMTP_HOST`, `SMTP_PORT`, `SMTP_USER`, `SMTP_PASSWORD`, `ALERT_EMAIL_FROM`, `ALERT_EMAIL_TO` for email; `TEAMS_WEBHOOK_URL` for a Teams workflow webhook; `ALERT_WEBHOOK_URL` for a generic webhook. Use *Send digest* on Stock alerts to test. Do not commit credentials.
 
-Daily files with `Part, Location, Min, Max, Live Value` are imported as stock snapshots. Their date comes from the first `YYYY-MM-DD` in the filename or `--as-of`. The attached tolerance file remains authoritative for Min/Max; disagreements appear as import warnings. To attach files to an existing dataset without sending notifications or starting another server:
+## For maintainers (Git repository only)
 
-```sh
-.venv/bin/python server.py --db /path/to/copy.sqlite3 --dataset <workbook-id> --quiet --no-serve --attach /path/to/Bin_Status_2026-10-22.xlsx
-```
-
-`--quiet` still synchronizes alert state. Use a database copy for backfill review before changing the live workspace.
-
-Replenishment insights JSON/CSV export and settings preview/preset APIs power the interactive frontend; see [architecture](docs/architecture.md). Preview does not save settings, change alerts, or send notifications.
-
-The offline demand-rate backtest writes aggregate Markdown and JSON reports to ignored `outputs/`:
-
-```sh
-.venv/bin/python scripts/backtest_rates.py --db /path/to/copy.sqlite3
-```
-
-It holds out the last 30 days of replenishment transfers and trains on the preceding 30 days. Schedule variants require planned lines in the holdout; completed-production variants are separately labelled perfect-foresight upper bounds. This validates demand-rate estimates, not stockout prediction.
-
-Use `--port 8766` for a different port or `--db /path/to/local.sqlite3` for a separate workspace. The server binds to loopback only. Stop it with Ctrl+C. Opening `index.html` directly shows startup instructions; persistence requires the running backend.
-
-## Verification
-
-```sh
-.venv/bin/python -m pip install -r requirements-dev.txt
-.venv/bin/python -m playwright install chromium
-.venv/bin/python -m pytest -q
-```
-
-To run only the backend tests, use `pytest -m 'not browser'`. Browser tests use temporary databases and synthetic workbooks, exercise saved edits, import, and desktop layout, and capture screenshots in `artifacts/`. See [architecture](docs/architecture.md) for API contracts.
-
-Live SCADA ingestion, factory system writes, real notifications, cloud deployment, and sponsor UAT remain outside this local implementation. Siemens approval and missing source definitions are still needed for operational use.
-
-## Start here
-
-- [Project brief](docs/project-brief.md): problem, stakeholders, scope, and source of each claim.
-- [Requirements](docs/requirements.md): candidate behaviors, success measures, and open decisions.
-- [Data inventory](docs/data-inventory.md): supplied workbook structure and the feasibility questions it raises.
-- [Development guide](docs/development.md): repository workflow and data handling.
-- [Decision log](docs/decisions.md): confirmed choices and unresolved proposals.
-- [Plan audit](docs/plan-audit.md): changes made to meet the implementation request.
-- [Architecture](docs/architecture.md): backend storage, endpoints, and limitations.
-- [Stock alerts](docs/alerts.md): Phase 1 reactive and Phase 2 predicted alerts, Watch tier, simulated stock edits, and email/Teams/webhook delivery.
-- [Teams setup](docs/teams-setup.md): step-by-step configuration for Microsoft Teams webhook workflows and cards.
-- [Phase 2 formulas](docs/formulas.md): locked demand, hours-to-minimum, alert-tier and suggested-quantity formulas.
-- [Open items](docs/open-items.md): deferred features, ML model evaluation, and outstanding data deliveries.
-- [Agent guidance](AGENTS.md): how to work safely and keep project context current.
-
-The local handoff must not contain credentials or raw Siemens data.
-
-## Phase 2 formulas (locked)
-
-Full definitions and a worked example: [docs/formulas.md](docs/formulas.md). Changing any of them needs the user's explicit permission each time.
-
-- `demand/day = (1 x history + 1 x schedule) / 2`; if schedule differs from history by more than 50%, use schedule only.
-- `hours_to_min = max(0, available - min) / demand x 24`
-- Alert if `available <= min`; Predicted if `hours_to_min <= lead + 24`; Watch (dashboard only) if `hours_to_min <= 72`.
-- `suggested_qty = ceil(max - (available - demand x lead / 24))`
-
-## Working agreement
-
-The team uses a hybrid process: agree on the problem, access constraints, and acceptance criteria with Siemens, then iterate on data, modeling, and alert prototypes. Keep a trace from each candidate requirement to a test and sponsor review. Use Jira for sprint ownership when access is available; record durable technical decisions in this repository.
-
-The GitHub repository is currently public. Do not commit or paste the supplied workbook, row level examples, internal links, credentials, or other Siemens material without explicit clearance. Raw workbooks live only in the Git-ignored `data/` folder.
-
-## Current source material
-
-The initial scope is based on the sponsor proposal, September 3 sponsor meeting notes and transcript, team project plan, project management worksheet, September 25 individual update, Jira import CSV, and the supplied `Prod_Capstone_Data.xlsx` workbook, kept locally in the Git-ignored `data/` folder. These source files are never committed. See the [project brief](docs/project-brief.md) for how sponsor statements are distinguished from team proposals.
+- Layout: `index.html` (UI), `server.py`, `src/siemens_capstone/` (API, storage, forecast, analytics), `tests/`, `scripts/`. Maintenance documentation is in `docs/` (architecture, alerts, formulas, Teams setup, design system, data handling); it is not part of the UAT zip.
+- The Phase 2 formulas in `docs/formulas.md` are locked: changing them, or their code in `src/siemens_capstone/proactive.py`, needs the owner's explicit permission.
+- The repository is public: never commit Siemens workbooks, database files, row-level examples or credentials. Keep them in the ignored `data/` folder.
+- Build a workspace from source files: `python server.py --db new.sqlite3 --import-workbook data/Prod_Capstone_Data.xlsx --attach data/Min_Max-SM.xlsx --attach data/BOMEXAMPLE.xlsx --attach Bin_Status_2026-10-22.xlsx --quiet --no-serve`.
+- Offline demand-rate backtest: `python scripts/backtest_rates.py --db copy.sqlite3` (aggregate reports in ignored `outputs/`).
+- Build the UAT zip: `python scripts/build_uat_zip.py --db data/handoff/siemens_uat.sqlite3`.
+- Tests: `pip install -r requirements-dev.txt`, `python -m playwright install chromium`, `python -m pytest -q` (`-m 'not browser'` for backend only).

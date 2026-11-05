@@ -56,13 +56,13 @@ Positions with no tolerance or no stock reading are not forecast.
 | Setting | Default | Range | Meaning |
 | --- | --- | --- | --- |
 | `lead_hours_stocked` | 3.0 | 0–720 | Lead time for a stocked item |
-| `lead_hours_fab` | 3.0 | 0–720 | Lead time for an item built in fab (sponsor to confirm; see `docs/decisions.md`) |
+| `lead_hours_fab` | 3.0 | 0–720 | Lead time for an item built in fab (sponsor to confirm) |
 | `safety_hours` | 24.0 | 0–168 | Extra buffer added to lead time before an alert fires |
 | `watch_hours` | 72.0 | 0–720 | Horizon for the Watch tier (visible on dashboard, no notifications) |
-| `weights.history` | 1.0 | 0–10 | Weight of historical transfer cadence (`replen_qty_per_day`) |
+| `weights.history` | 2.0 | 0–10 | Weight of historical transfer cadence (`replen_qty_per_day`) |
 | `weights.schedule` | 1.0 | 0–10 | Weight of planned production schedule (30-day requirement × BOM / 30) |
 | `weights.observed` | 0.0 | 0–10 | Weight of observed depletion between dated snapshots (default 0.0) |
-| `divergence_pct` | 50.0 | 0–1000 | When schedule rate differs from history rate by more than this percentage, history is dropped so schedule outweighs it |
+| `divergence_pct` | 1000.0 | 0–1000 | When schedule rate differs from history rate by more than this percentage, history is dropped so schedule outweighs it |
 
 Each position has a lead class (`stocked` or `fab`, default `stocked`) selectable in the table; it determines which lead time applies.
 

@@ -1,9 +1,9 @@
 # Frontend design system
 
-Status: accepted by the user 2026-10-29. Read before ANY UI edit. Authority: user instructions, then approved mocks (`docs/mock/design/`), then this file, then older docs.
+Status: accepted by the user 2026-10-29. Read before ANY UI edit. Authority: user instructions, then this file, then older docs.
 
 ## 1. Stack
-Single `index.html` with embedded CSS, JavaScript and SVG. No framework, no remote fonts, icons or scripts. Charts are hand-written SVG. The mock's `tokens.css` and `app.css` get inlined into `index.html` when built.
+Single `index.html` with embedded CSS, JavaScript and SVG. No framework, no remote fonts, icons or scripts. Charts are hand-written SVG. Design tokens live at the top of `index.html` (`:root`).
 
 ## 2. Theme: plain operations console
 Light, flat, dense. Content is tables, one status strip per page and one detail column. Structure comes from 1 px rules, not boxes with shadows. Colour is used only for the accent and for alert tiers, and every tier colour also carries a text label.
@@ -41,4 +41,6 @@ Nav item, Button (default, primary), Status tag, Status strip, Table (sticky hea
 Tokens only, no raw hex or px in component CSS. Every number goes through one formatter. Names never truncate mid-word. Targets at least 24 px, contrast 4.5:1. Never convey a tier by colour alone. Anti-patterns to avoid here: identical shadowed cards, big number plus tiny label tiles, all-caps eyebrows, decorative icons, motion on hover.
 
 ## 8. Workflow
-Plan, build on tokens, render at 1440x900 and 1280x800 with real part names, measure clipping, overlap and contrast, fix (max 3 loops), fresh-reviewer critique, then lock screenshots. Mock sources: `docs/mock/design/`.
+Plan, build on tokens, render at 1440x900 and 1280x800 with real part names, measure clipping, overlap and contrast, fix (max 3 loops), fresh-reviewer critique, then lock screenshots.
+
+Colour: headings and tile figures use `--brand` (#009999, about 3.5:1 on white, allowed for large text only); body and table text uses `--ink` (a dark teal-gray, about 11:1); chart strokes and the toast use `--dark`.

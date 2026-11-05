@@ -252,15 +252,15 @@ def test_settings_persist_across_store_instances(ready, tmp_path):
     from siemens_capstone.store import Store
     again = Store(store.path, alert_config=store.alert_config)
     s = again.stock_settings(ds)
-    assert s['lead_hours_stocked'] == 48.0 and s['weights']['observed'] == 0.0 and s['weights']['history'] == 1.0
+    assert s['lead_hours_stocked'] == 48.0 and s['weights']['observed'] == 0.0 and s['weights']['history'] == 2.0
     assert again.stock_view(ds)['forecast']['summary']['predicted'] == 2
 
 
 def test_default_settings_when_no_row(ready):
     store, ds, _ = ready
     s = store.stock_settings(ds)
-    assert (s['lead_hours_stocked'], s['lead_hours_fab'], s['safety_hours'], s['watch_hours'], s['divergence_pct']) == (3.0, 3.0, 24.0, 72.0, 50.0)
-    assert s['weights'] == {'history': 1.0, 'schedule': 1.0, 'observed': 0.0}
+    assert (s['lead_hours_stocked'], s['lead_hours_fab'], s['safety_hours'], s['watch_hours'], s['divergence_pct']) == (3.0, 3.0, 24.0, 72.0, 1000.0)
+    assert s['weights'] == {'history': 2.0, 'schedule': 1.0, 'observed': 0.0}
 
 
 def test_invalid_settings_are_rejected_and_nothing_changes(ready):

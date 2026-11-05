@@ -112,14 +112,15 @@ def test_weights_slider_live_preview_and_presets(tmp_path, clean_env):
         assert preview_info.value.status == 200
         # Preview updated without changing /api/stock settings
         stock_data = page.request.get(base + f'/api/stock?dataset={ds}').json()
-        assert stock_data['forecast']['settings']['weights']['history'] == 1.0
+        assert stock_data['forecast']['settings']['weights']['history'] == 2.0
+        assert stock_data['forecast']['settings']['weights']['schedule'] == 1.0
 
         # Apply these weights
         with page.expect_response('**/api/stock/settings') as apply_info:
             page.locator('#btn-apply-weights').click()
         assert apply_info.value.status == 200
         stock_data_after = page.request.get(base + f'/api/stock?dataset={ds}').json()
-        assert stock_data_after['forecast']['settings']['weights']['history'] == 2.0
+        assert stock_data_after['forecast']['settings']['weights']['schedule'] == 0.0  # share 100 % history
 
         # Save as preset
         page.locator('#preset-name').fill('TestPreset')

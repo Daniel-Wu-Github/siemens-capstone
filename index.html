@@ -405,7 +405,7 @@ function detailHtml(p, fs) {
   steps.push(['Schedule per day', inp.schedule == null ? 'none' : fmt(inp.schedule, 2)]);
   if (dropped.length) steps.push(['Rule', `differs by more than ${fmt(fs.divergence_pct)}%, ${dropped.join(', ')} dropped`]);
   steps.push(['Demand per day', `${p.demand_per_day == null ? 'none' : fmt(p.demand_per_day, 2)}${used.length ? ' (' + used.join(' + ') + ')' : ''}`]);
-  if (p.hours_to_min != null && p.demand_per_day) steps.push(['Hours to minimum', `(${fmt(p.available)} − ${fmt(p.min)}) / ${fmt(p.demand_per_day, 2)} × 24 = ${fmtHours(p.hours_to_min)}`]);
+  if (p.hours_to_min != null && p.demand_per_day) steps.push(['Hours to minimum', `max(0, ${fmt(p.available)} − ${fmt(p.min)}) / ${fmt(p.demand_per_day, 2)} × 24 = ${fmtHours(p.hours_to_min)}`]);
   steps.push(['Alert threshold', `lead ${fmt(p.lead_hours, 1)} h + safety ${fmt(fs.safety_hours, 1)} h = ${fmt(tick, 1)} h`]);
   steps.push(['Suggested quantity', p.suggested_qty == null ? '—' : fmt(p.suggested_qty)]);
   const [tc, tt] = tierOf(p);
@@ -806,7 +806,7 @@ function settingsPageHtml() {
       schedule: fs.weights.schedule,
       share: shareOf(fs.weights.history, fs.weights.schedule),
       observed: fs.weights.observed,
-      divergence_pct: fs.divergence_pct,
+      divergence_pct: fs.divergence_pct >= 1000 ? 50 : fs.divergence_pct,
       override_off: fs.divergence_pct >= 1000
     };
   }
@@ -836,7 +836,7 @@ function settingsPageHtml() {
         <div class="body">
           <div class="slider-grid">
             <label for="tw-share">History share</label>
-            <input id="tw-share" type="range" min="0" max="100" step="5" value="${liveWeights.share}" aria-label="History share of the demand estimate, in percent" aria-describedby="ratio-note">
+            <input id="tw-share" type="range" min="0" max="100" step="1" value="${liveWeights.share}" aria-label="History share of the demand estimate, in percent" aria-describedby="ratio-note">
             <span class="val" id="val-share">${fmt(liveWeights.share)}%</span>
           </div>
           <div class="note" id="ratio-note">${ratioNote(liveWeights.share)}</div>
@@ -950,7 +950,10 @@ function bindSettings() {
   document.querySelectorAll('[data-fc]').forEach(i => i.addEventListener('input', () => {
     const k = i.dataset.fc, v = Number(i.value), sl = {observed: 'observed', divergence_pct: 'divergence'}[k];
     if (k === 'history_share' && i.value.trim() !== '' && Number.isFinite(v) && v >= 0 && v <= 100) setShare(v);
-    else if (sl && i.value.trim() !== '' && Number.isFinite(v)) {
+    else if (k === 'divergence_pct' && i.value.trim() !== '' && Number.isFinite(v) && v >= 0) {
+      if (v >= 1000) { liveWeights.override_off = true; setOverride(true); }
+      else { liveWeights.divergence_pct = v; setOverride(false); }
+    } else if (sl && i.value.trim() !== '' && Number.isFinite(v)) {
       liveWeights[k] = v;
       const el = $('#tw-' + sl), val = $('#val-' + sl);
       if (el) el.value = v;
@@ -959,13 +962,15 @@ function bindSettings() {
     triggerPreview();
   }));
 
-  $('#tw-override-off')?.addEventListener('change', e => {
-    liveWeights.override_off = e.target.checked;
-    const divInput = $('#tw-divergence'), divVal = $('#val-divergence');
-    if (divInput) divInput.disabled = liveWeights.override_off;
-    if (divVal) divVal.textContent = liveWeights.override_off ? 'off' : fmt(liveWeights.divergence_pct) + '%';
-    triggerPreview();
-  });
+  const setOverride = off => {
+    liveWeights.override_off = off;
+    const box = $('#tw-override-off'), divInput = $('#tw-divergence'), divVal = $('#val-divergence'), fc = $('#fc-divergence_pct');
+    if (box) box.checked = off;
+    if (divInput) { divInput.disabled = off; divInput.value = Math.min(200, liveWeights.divergence_pct); }
+    if (divVal) divVal.textContent = off ? 'off' : fmt(liveWeights.divergence_pct) + '%';
+    if (fc) fc.value = off ? 1000 : liveWeights.divergence_pct;
+  };
+  $('#tw-override-off')?.addEventListener('change', e => { setOverride(e.target.checked); triggerPreview(); });
 
   $('#btn-apply-weights')?.addEventListener('click', async () => {
     const body = {

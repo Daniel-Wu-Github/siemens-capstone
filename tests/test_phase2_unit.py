@@ -11,14 +11,15 @@ NAN, INF = float('nan'), float('inf')
 W = dict(history=1.0, schedule=1.0, observed=1.0)
 
 
-DEFAULT_W = dict(history=1.0, schedule=1.0, observed=0.0)
+DEFAULT_W = dict(history=2.0, schedule=1.0, observed=0.0)
+LEGACY = dict(weights=dict(history=1.0, schedule=1.0, observed=0.0), divergence_pct=50.0)  # the pre-2026-11-04 rule, pinned for blend-rule tests
 
 
 # ---------------------------------------------------------------- default_settings
 def test_default_settings_defaults_are_3_3_24_72():
     s = proactive.default_settings({})
     assert (s['lead_hours_stocked'], s['lead_hours_fab'], s['safety_hours'], s['watch_hours']) == (3.0, 3.0, 24.0, 72.0)
-    assert s['weights'] == DEFAULT_W and s['divergence_pct'] == 50.0
+    assert s['weights'] == DEFAULT_W and s['divergence_pct'] == 1000.0
     assert s == proactive.DEFAULT_SETTINGS
 
 
@@ -45,8 +46,8 @@ def test_default_settings_returns_fresh_deep_copy():
     a = proactive.default_settings({})
     a['weights']['history'] = 9; a['lead_hours_stocked'] = 99
     b = proactive.default_settings({})
-    assert b['weights']['history'] == 1.0 and b['lead_hours_stocked'] == 3.0
-    assert proactive.DEFAULT_SETTINGS['weights']['history'] == 1.0 and b is not a and b['weights'] is not a['weights']
+    assert b['weights']['history'] == 2.0 and b['lead_hours_stocked'] == 3.0
+    assert proactive.DEFAULT_SETTINGS['weights']['history'] == 2.0 and b is not a and b['weights'] is not a['weights']
 
 
 # ---------------------------------------------------------------- validate_settings
@@ -60,7 +61,7 @@ def test_validate_merges_without_mutating_current_or_aliasing_it():
     assert cur == snapshot
     assert out['lead_hours_stocked'] == 5.0 and out['safety_hours'] == 2.0 and out['lead_hours_fab'] == 3.0
     out['weights']['history'] = 7
-    assert cur['weights']['history'] == 1.0
+    assert cur['weights']['history'] == 2.0
     assert isinstance(out['lead_hours_stocked'], float)
 
 
@@ -219,7 +220,7 @@ def test_blend_dropped_history_with_nothing_else_gives_schedule_alone():
 
 # ---------------------------------------------------------------- project
 def settings(**kw):
-    s = base()
+    s = base(); s.update(copy.deepcopy(LEGACY))
     for k, v in kw.items(): s[k] = v
     return s
 
@@ -238,7 +239,7 @@ NEW_FIELDS = ('lead_class', 'lead_hours', 'demand_per_day', 'demand_basis', 'dem
 
 
 def run(it, inventory=(), st=None, classes=None):
-    out = proactive.project([it], list(inventory) if inventory is not None else None, st or base(), classes)
+    out = proactive.project([it], list(inventory) if inventory is not None else None, st or settings(), classes)
     return out[0]
 
 
@@ -535,3 +536,12 @@ def test_project_watch_tier():
     p_short_28 = run(item(available=38.0, minimum=10.0, maximum=100.0), inv_row, st_short)
     assert p_short_28['forecast'] == 'ok'
 
+
+
+def test_shipped_defaults_blend_two_to_one_and_never_drop_history():
+    p = run(item(), [inv(replen=8.0, planned=300.0, bom_status='ok')], base())               # schedule 10/day
+    assert p['demand_per_day'] == pytest.approx((2 * 8 + 10) / 3) and p['demand_dropped'] == []
+    p = run(item(), [inv(replen=10.0, planned=900.0, bom_status='ok')], base())              # schedule 30/day: 200 % apart, history kept
+    assert p['demand_per_day'] == pytest.approx((2 * 10 + 30) / 3) and p['demand_basis'] == ['history', 'schedule']
+    p = run(item(), [inv(replen=10.0, planned=900.0, bom_status='ok')], settings(divergence_pct=50))
+    assert p['demand_dropped'] == ['history'] and p['demand_per_day'] == 30.0                  # the earlier rule is one setting away

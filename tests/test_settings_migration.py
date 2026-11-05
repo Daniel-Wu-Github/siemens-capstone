@@ -15,8 +15,8 @@ def test_fresh_store_defaults(tmp_path):
     assert s['watch_hours'] == 72.0
     assert s['lead_hours_stocked'] == 3.0
     assert s['lead_hours_fab'] == 3.0
-    assert s['weights'] == {'history': 1.0, 'schedule': 1.0, 'observed': 0.0}
-    assert s['divergence_pct'] == 50.0
+    assert s['weights'] == {'history': 2.0, 'schedule': 1.0, 'observed': 0.0}
+    assert s['divergence_pct'] == 1000.0
     assert '_version' not in s
 
 

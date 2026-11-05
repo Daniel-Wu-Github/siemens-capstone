@@ -283,12 +283,12 @@ def test_predicted_alerts_every_control(tmp_path):
         expect(rows(page, body)).to_have_count(1)
         expect(page.locator('#pred-search')).to_be_focused()  # re-render keeps typing focus
 
-        # Click a row: the detail explains the schedule-only demand (history dropped by the divergence rule).
+        # Click a row: the detail shows the 2:1 blend of history (30/day) and schedule (60/day); the override is off by default.
         rows(page, body).first.click()
         detail = page.locator('#pred-detail')
         expect(detail).to_contain_text('Synthetic div')
-        expect(detail).to_contain_text('history dropped')
-        expect(detail).to_contain_text('Demand per day60 (schedule)')
+        expect(detail).not_to_contain_text('dropped')
+        expect(detail).to_contain_text('Demand per day40 (history + schedule)')
         page.locator('#pred-search').fill('')
         page.locator('#pred-filter').select_option('act')
 
@@ -296,7 +296,7 @@ def test_predicted_alerts_every_control(tmp_path):
         safe_row = rows(page, body).filter(has_text='BSAFE')
         safe_row.focus(); safe_row.press('Enter')
         expect(detail).to_contain_text('Synthetic safe')
-        expect(detail).to_contain_text('(60 − 10) / 30 × 24 = 40 h')
+        expect(detail).to_contain_text('max(0, 60 − 10) / 30 × 24 = 40 h')
         expect(detail.locator('svg[role="img"]')).to_have_count(1)  # projection chart
         expect(detail).to_contain_text('Suggested quantity44')
 
@@ -413,7 +413,7 @@ def test_settings_form_weights_preview_and_presets(tmp_path):
         ds = seed(page, base)
         page.goto(base + '/#settings')
         expected = {'lead_hours_stocked': '3', 'lead_hours_fab': '3', 'safety_hours': '24', 'watch_hours': '72',
-                    'history_share': '50', 'observed': '0', 'divergence_pct': '50'}
+                    'history_share': '67', 'observed': '0', 'divergence_pct': '1000'}
         for key, value in expected.items():
             expect(page.locator(f'#fc-{key}')).to_have_value(value)
 
@@ -443,7 +443,13 @@ def test_settings_form_weights_preview_and_presets(tmp_path):
         expect(page.locator('#val-share')).to_have_text('75%')
         expect(page.locator('#ratio-note')).to_contain_text('History 75% · schedule 25%')
         expect(page.locator('#preview-box table').first).to_contain_text('Predicted')
-        assert settings_of(page, base, ds)['weights']['history'] == 1
+        assert settings_of(page, base, ds)['weights']['history'] == 2
+        expect(page.locator('#tw-override-off')).to_be_checked()       # shipped default: override off
+        expect(page.locator('#tw-divergence')).to_be_disabled()
+        with page.expect_response('**/api/stock/preview'):
+            page.locator('#tw-override-off').uncheck()
+        expect(page.locator('#val-divergence')).to_have_text('50%')    # back to the earlier 50 % rule
+        expect(page.locator('#fc-divergence_pct')).to_have_value('50')
         for slider, value, label, shown in (('#tw-share', '50', '#val-share', '50%'), ('#tw-observed', '1.5', '#val-observed', '1.5'),
                                             ('#tw-divergence', '100', '#val-divergence', '100%')):
             with page.expect_response('**/api/stock/preview'):
@@ -477,7 +483,7 @@ def test_settings_form_weights_preview_and_presets(tmp_path):
         expect(page.locator('#preset-list')).to_contain_text('History 2:1')
         expect(page.locator('#preset-list')).to_contain_text('H 2 · S 0 · O 1.5')
         expect(page.locator('#preset-name')).to_have_value('')
-        assert settings_of(page, base, ds)['weights']['history'] == 1  # saving a preset does not apply it
+        assert settings_of(page, base, ds)['weights']['observed'] == 0  # saving a preset does not apply it
 
         # Apply these weights.
         with page.expect_response('**/api/stock/settings') as info:
@@ -489,7 +495,7 @@ def test_settings_form_weights_preview_and_presets(tmp_path):
         expect(page.locator('#preview-box')).to_contain_text('Move a slider')  # preview cleared after apply
 
         # Restore defaults through the form, then apply the preset after a reload.
-        for key, value in (('history_share', '50'), ('observed', '0'), ('divergence_pct', '50')):
+        for key, value in (('history_share', '67'), ('observed', '0'), ('divergence_pct', '1000')):
             page.locator(f'#fc-{key}').fill(value)
         with page.expect_response('**/api/stock/settings'):
             page.get_by_role('button', name='Save forecast settings').click()
@@ -497,7 +503,7 @@ def test_settings_form_weights_preview_and_presets(tmp_path):
         expect(page.locator('#preset-list')).to_contain_text('History 2:1')
         with page.expect_response('**/api/stock/settings'):
             page.locator('[data-apply-preset="History 2:1"]').click()
-        assert settings_of(page, base, ds)['weights']['history'] == 2
+        assert settings_of(page, base, ds)['weights'] == {'history': 2.0, 'schedule': 0.0, 'observed': 1.5}
         delete = page.locator('[data-delete-preset="History 2:1"]')
         delete.click()
         expect(delete).to_have_text('Click again to delete')
@@ -625,8 +631,8 @@ def test_settings_formulas_and_tier_counter_update_live_with_unsaved_values(tmp_
         formulas = page.locator('#formulas-live')
         for tier, n in (('below_min', '1'), ('predicted', '1'), ('watch', '2'), ('ok', '3'), ('no_rate', '56')):
             expect(count(tier)).to_have_text(n)
-        expect(formulas).to_contain_text('demand = 50% × history + 50% × schedule')
-        expect(formulas).to_contain_text('If |schedule − history| / history × 100 > 50, history is dropped')
+        expect(formulas).to_contain_text('demand = 66.67% × history + 33.33% × schedule')
+        expect(formulas).to_contain_text('The override is off: history is never dropped.')
         expect(formulas).to_contain_text('hours_to_min = max(0, available − min) / demand × 24')
         expect(formulas).to_contain_text('available ≤ min')
         expect(formulas).to_contain_text('stocked 3 + 24 = 27 h, fab 3 + 24 = 27 h')
@@ -657,9 +663,11 @@ def test_settings_formulas_and_tier_counter_update_live_with_unsaved_values(tmp_
         expect(page.locator('#tw-share')).to_have_value('75')
         expect(page.locator('#val-share')).to_have_text('75%')
         expect(formulas).to_contain_text('demand = 75% × history + 25% × schedule')
-        page.locator('#tw-override-off').check()
-        expect(formulas).to_contain_text('The override is off')
         page.locator('#tw-override-off').uncheck()
+        expect(formulas).to_contain_text('If |schedule − history| / history × 100 > 50, history is dropped and demand = schedule.')
+        page.locator('#fc-divergence_pct').fill('1000')           # typing 1000 in the field switches the override off again
+        expect(page.locator('#tw-override-off')).to_be_checked()
+        expect(formulas).to_contain_text('The override is off')
         page.locator('#fc-history_share').fill('50')
 
         # An invalid field pauses the preview instead of raising an error.
