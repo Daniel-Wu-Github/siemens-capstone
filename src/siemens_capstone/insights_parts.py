@@ -75,12 +75,17 @@ def parts_report(positions, inventory, thresholds=None):
     return dict(thresholds=thresholds, summary=summary, notes=list(NOTES), parts=parts)
 
 
+def _safe_cell(value):
+    """Spreadsheet apps run cells that start with = + - @ as formulas; prefix text like that with an apostrophe."""
+    return "'" + value if isinstance(value, str) and value[:1] in ('=', '+', '-', '@', '\t', '\r') else value
+
+
 def to_csv(report):
     output = StringIO(newline='')
     writer = csv.DictWriter(output, fieldnames=CSV_FIELDS)
     writer.writeheader()
     for part in report['parts']:
-        row = {key: part.get(key) for key in CSV_FIELDS}
-        row['flags'] = ';'.join(part['flags'])
+        row = {key: _safe_cell(part.get(key)) for key in CSV_FIELDS}
+        row['flags'] = ';'.join(part['flags'])  # fixed vocabulary, never starts with a formula character
         writer.writerow(row)
     return output.getvalue()

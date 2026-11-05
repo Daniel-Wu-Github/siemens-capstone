@@ -46,7 +46,7 @@ All source records are kept locally. Original imported row records are not share
 | GET | `/api/stock/presets?dataset=ID` | Saved presets as `{name, settings, created_at}` records |
 | POST | `/api/stock/presets` | `{dataset, name, settings}` saves or replaces a trimmed 1–40 character name; settings validated against current values |
 | POST | `/api/stock/presets/delete` | `{dataset, name}` deletes a preset; apply via the existing stock settings route |
-| GET/POST | `/api/stock...` | Stock alerts, simulated stock, lead classes, and Phase 2 forecast; see `docs/alerts.md` |
+| GET/POST | `/api/stock...` | Stock alerts, simulated stock, lead classes, and Phase 2 forecast; see `docs/alerts.md`. `GET /api/stock` is read-only: it never syncs alerts or sends notifications (imports, edits, settings changes and checks do) |
 | POST | `/api/import?filename=workbook.xlsx` | Binary XLSX body with `application/octet-stream`; maximum 32 MB |
 
 JSON writes require `application/json`. Host and Origin checks restrict requests to the local server. Paths are explicitly routed, so the database and repository files are not served. SQL uses bound parameters. DOM values from workbook metadata are escaped. Workbook import validates expansion size, duplicate column headers, required sheets/columns, candidate keys, quantities, supported count units, date order, and candidate joins. Same-file import is deduplicated by SHA-256.

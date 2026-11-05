@@ -101,6 +101,10 @@ class Store:
     def import_workbook(self, content, filename):
         report = inspect_workbook(content, Path(filename).name[:120])
         records = report.pop('records')
+        errors = [f for f in report['findings'] if f.get('severity') == 'error']
+        if errors:  # a wrong file must not become a permanent, undeletable dataset
+            raise ValueError('This is not the manufacturing workbook: ' + '; '.join(
+                f"{f['sheet']}: {f['message'].rstrip('.')}" for f in errors[:4]) + '. Nothing was imported.')
         dataset_id = 'xlsx-' + report['checksum'][:16]
         dataset = dict(id=dataset_id, name=report['filename'], kind='workbook', created_at=now(),
                        as_of=None, demand_factor=1, forecast_ready=False, checksum=report['checksum'])
@@ -275,8 +279,8 @@ class Store:
         return record
 
     def stock_view(self, dataset_id):
+        """Read-only: opening or reloading the page never changes alerts or sends anything. Alerts sync on imports, edits, settings changes and checks."""
         with self.connection() as db:
-            changes = self._sync_changes(db, dataset_id)
             items, as_of, has_tol = self._stock_positions(db, dataset_id)
             open_alerts = self._open_stock_alerts(db, dataset_id)
             notes = [json.loads(r['payload']) for r in db.execute('SELECT payload FROM notifications WHERE dataset=? ORDER BY rowid DESC LIMIT 5', (dataset_id,))]
@@ -290,8 +294,7 @@ class Store:
                                  ok=sum(p['status'] == 'OK' for p in items), no_tolerance=sum(p['status'] == 'No tolerance' for p in items),
                                  overridden=sum(p['overridden'] for p in items)),
                     forecast=dict(settings=settings, summary=counts),
-                    open_alerts=open_alerts, notifications=notes, channels=stock_alerts.public_config(self.alert_config),
-                    notification=self._announce(dataset_id, changes))
+                    open_alerts=open_alerts, notifications=notes, channels=stock_alerts.public_config(self.alert_config), notification=None)
 
     def set_available(self, dataset_id, position, available):
         """Simulate a stock reading for one position. Source files and imported rows are never changed."""

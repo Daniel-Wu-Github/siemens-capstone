@@ -6,7 +6,7 @@ from qc_helpers import full_workbook, tolerance_bytes
 from test_api import running_server
 from test_phase2_store_api import BINS, PRODUCTION, TOLS, TRANSFERS
 
-LABELS = ['Stocked lead time (h)', 'Fab lead time (h)', 'Safety buffer (h)', 'Watch window (h)', 'History weight', 'Schedule weight',
+LABELS = ['Stocked lead time (h)', 'Fab lead time (h)', 'Safety buffer (h)', 'Watch window (h)', 'History share (%), schedule gets the rest',
           'Observed weight', 'Divergence threshold (%)']
 
 
@@ -105,8 +105,8 @@ def test_weights_slider_live_preview_and_presets(tmp_path, clean_env):
         # Moving History to 2 triggers preview debounce
         with page.expect_response('**/api/stock/preview') as preview_info:
             page.evaluate('''() => {
-                const el = document.querySelector('#tw-history');
-                el.value = '2';
+                const el = document.querySelector('#tw-share');
+                el.value = '100';
                 el.dispatchEvent(new Event('input'));
             }''')
         assert preview_info.value.status == 200

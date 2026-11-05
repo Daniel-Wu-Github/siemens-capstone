@@ -51,7 +51,9 @@ def main():
         ref = store.import_reference(dataset_id, path.read_bytes(), path.name, args.as_of, announce=not args.quiet)
         print(f"Reference attached ({ref['kind']}): {ref['rows']:,} rows", flush=True)
     if args.no_serve: return
-    server = ThreadingHTTPServer(('127.0.0.1', args.port), handler_for(store))
+    try: server = ThreadingHTTPServer(('127.0.0.1', args.port), handler_for(store))
+    except OSError as exc:
+        raise SystemExit(f'Cannot listen on port {args.port} ({exc.strerror}). Another program may be using it: start with a different port, for example `server.py --port {args.port + 1}`.') from None
     server.daemon_threads = True
     print(f'Open http://127.0.0.1:{server.server_port} — database: {args.db}', flush=True)
     if args.check_minutes > 0:

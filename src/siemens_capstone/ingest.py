@@ -229,6 +229,7 @@ def inspect_reference(content, filename, as_of=None):
         key_fields = [k for k in (REFERENCE_KEYS[kind] or ()) if k in header]
         daily_minmax = []
         clean, seen, counters = [], set(), dict(duplicate_key=0, missing_key=0, invalid_number=0, negative_quantity=0)
+        stock_field, readable = {'daily_status': 'Live Value', 'snapshot': 'Available stock'}.get(kind), 0
         for index, raw in enumerate(rows):
             if index >= 300000: raise ValueError('A sheet exceeds the 300,000 row limit.')
             if all(v is None or v == '' for v in raw): continue
@@ -244,12 +245,17 @@ def inspect_reference(content, filename, as_of=None):
                     if not math.isfinite(n): raise ValueError()
                     if n < 0: counters['negative_quantity'] += 1
                 except (TypeError, ValueError): counters['invalid_number'] += 1
+            if stock_field:
+                try: readable += math.isfinite(float(row.get(stock_field)))
+                except (TypeError, ValueError): pass
             if kind == 'daily_status':
                 daily_minmax.append((row.get('Part'), row.get('Location'), row.get('Min'), row.get('Max')))
                 row = {'Material': row.get('Part'), 'Material Description': row.get('Description'),
                        'Storage Type': identifier(row.get('Type')), 'Storage Bin': row.get('Location'),
                        'Available stock': row.get('Live Value')}
             clean.append(row)
+        if stock_field and not readable:  # an unreadable file must not become the latest snapshot and resolve every alert
+            raise ValueError(f'No readable stock values: the "{stock_field}" column has no numbers. Nothing was imported.')
         messages = dict(duplicate_key='Repeated keys; the last row wins or quantities are added.', missing_key='Rows lack a required identifier.',
                         invalid_number='Quantity is missing or not numeric.', negative_quantity='Negative values need business review.')
         findings = [dict(code=c, severity='warning', sheet=sheet, count=n, message=messages[c]) for c, n in counters.items() if n]

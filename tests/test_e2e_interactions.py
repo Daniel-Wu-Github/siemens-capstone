@@ -413,7 +413,7 @@ def test_settings_form_weights_preview_and_presets(tmp_path):
         ds = seed(page, base)
         page.goto(base + '/#settings')
         expected = {'lead_hours_stocked': '3', 'lead_hours_fab': '3', 'safety_hours': '24', 'watch_hours': '72',
-                    'history': '1', 'schedule': '1', 'observed': '0', 'divergence_pct': '50'}
+                    'history_share': '50', 'observed': '0', 'divergence_pct': '50'}
         for key, value in expected.items():
             expect(page.locator(f'#fc-{key}')).to_have_value(value)
 
@@ -438,24 +438,25 @@ def test_settings_form_weights_preview_and_presets(tmp_path):
         # Sliders preview without saving.
         expect(page.locator('#preview-box')).to_contain_text('Move a slider to preview alert counts.')
         with page.expect_response('**/api/stock/preview') as info:
-            page.locator('#tw-history').fill('2')
-        assert info.value.ok and info.value.request.post_data_json['weights']['history'] == 2
-        expect(page.locator('#val-history')).to_have_text('2')
+            page.locator('#tw-share').fill('75')
+        assert info.value.ok and info.value.request.post_data_json['weights'] == {'history': 1.5, 'schedule': 0.5, 'observed': 0}
+        expect(page.locator('#val-share')).to_have_text('75%')
+        expect(page.locator('#ratio-note')).to_contain_text('History 75% · schedule 25%')
         expect(page.locator('#preview-box table').first).to_contain_text('Predicted')
         assert settings_of(page, base, ds)['weights']['history'] == 1
-        for slider, value, label, shown in (('#tw-schedule', '0', '#val-schedule', '0'), ('#tw-observed', '1.5', '#val-observed', '1.5'),
+        for slider, value, label, shown in (('#tw-share', '50', '#val-share', '50%'), ('#tw-observed', '1.5', '#val-observed', '1.5'),
                                             ('#tw-divergence', '100', '#val-divergence', '100%')):
             with page.expect_response('**/api/stock/preview'):
                 page.locator(slider).fill(value)
             expect(page.locator(label)).to_have_text(shown)
         expect(page.locator('#preview-box')).to_contain_text('No tier changes with these weights.')
-        # History 0 with schedule 0 leaves PRED without a rate: the tier change is listed in plain words.
+        # All weight on the schedule leaves PRED (not in the BOM) without a rate: the tier change is listed in plain words.
         with page.expect_response('**/api/stock/preview'):
-            page.locator('#tw-history').fill('0')
+            page.locator('#tw-share').fill('0')
         expect(page.locator('#preview-box')).to_contain_text('Tier changes')
         expect(page.locator('#preview-box tr', has_text='BPRED')).to_contain_text('Predicted → No rate')
         with page.expect_response('**/api/stock/preview'):
-            page.locator('#tw-history').fill('2')
+            page.locator('#tw-share').fill('100')
 
         # Override off disables the divergence slider and previews with 1000 %.
         with page.expect_response('**/api/stock/preview') as info:
@@ -484,11 +485,11 @@ def test_settings_form_weights_preview_and_presets(tmp_path):
         assert info.value.ok
         applied = settings_of(page, base, ds)
         assert applied['weights'] == {'history': 2.0, 'schedule': 0.0, 'observed': 1.5} and applied['divergence_pct'] == 100
-        expect(page.locator('#fc-history')).to_have_value('2')
+        expect(page.locator('#fc-history_share')).to_have_value('100')
         expect(page.locator('#preview-box')).to_contain_text('Move a slider')  # preview cleared after apply
 
         # Restore defaults through the form, then apply the preset after a reload.
-        for key, value in (('history', '1'), ('schedule', '1'), ('observed', '0'), ('divergence_pct', '50')):
+        for key, value in (('history_share', '50'), ('observed', '0'), ('divergence_pct', '50')):
             page.locator(f'#fc-{key}').fill(value)
         with page.expect_response('**/api/stock/settings'):
             page.get_by_role('button', name='Save forecast settings').click()
@@ -526,7 +527,7 @@ def test_every_page_and_table_fits_at_desktop_widths(tmp_path, width, height):
 
 # ---------------------------------------------------------------- clear all, sorting, no-rate reasons, live settings
 @pytest.mark.browser
-def test_stock_clear_all_and_column_sorting(tmp_path):
+def test_stock_acknowledge_all_and_column_sorting(tmp_path):
     mails = lambda: len(list((tmp_path / 'outbox').glob('*.eml')))
     with running_server(tmp_path) as base, sync_playwright() as p:
         s = Session(p); page = s.page
@@ -575,7 +576,7 @@ def test_stock_clear_all_and_column_sorting(tmp_path):
         page.locator('[data-sort="location"]').click(); page.locator('[data-sort="location"]').click()
         expect(header('location')).to_have_attribute('aria-sort', 'none')
 
-        # Clear all alerts: needs a second click; changes alert state only.
+        # Acknowledge all below-minimum: needs a second click; changes alert state only.
         page.locator('[data-stock-pos]').first.fill('1')            # no-op until Set; make a real edit through the API instead
         page.request.post(base + '/api/stock/available', data={'dataset': ds, 'position': 'FAR|401|BFAR', 'available': 190})
         page.reload()
@@ -583,12 +584,12 @@ def test_stock_clear_all_and_column_sorting(tmp_path):
         button = page.locator('#clear-alerts')
         expect(button).to_be_enabled()
         button.click()
-        expect(button).to_have_text('Click again to clear 1')
+        expect(button).to_have_text('Click again to acknowledge 1')
         page.wait_for_timeout(100)
         open_ = lambda: [(a['material'], a['status']) for a in page.request.get(base + f'/api/stock?dataset={ds}').json()['open_alerts']]
         assert ('BM', 'Open') in open_()                             # first click changed nothing
         button.click()
-        expect(page.locator('#toast')).to_contain_text('1 alert(s) cleared. Stock levels unchanged.')
+        expect(page.locator('#toast')).to_contain_text('1 alert(s) acknowledged. Stock levels unchanged')
         assert ('BM', 'Acknowledged') in open_() and ('PRED', 'Open') in open_()  # predicted alert is not cleared
         expect(button).to_be_disabled()
         expect(page.locator('.strip')).to_contain_text('Simulated edits')
@@ -624,7 +625,7 @@ def test_settings_formulas_and_tier_counter_update_live_with_unsaved_values(tmp_
         formulas = page.locator('#formulas-live')
         for tier, n in (('below_min', '1'), ('predicted', '1'), ('watch', '2'), ('ok', '3'), ('no_rate', '56')):
             expect(count(tier)).to_have_text(n)
-        expect(formulas).to_contain_text('demand = (1 × history + 1 × schedule) / (1 + 1)')
+        expect(formulas).to_contain_text('demand = 50% × history + 50% × schedule')
         expect(formulas).to_contain_text('If |schedule − history| / history × 100 > 50, history is dropped')
         expect(formulas).to_contain_text('hours_to_min = max(0, available − min) / demand × 24')
         expect(formulas).to_contain_text('available ≤ min')
@@ -649,17 +650,17 @@ def test_settings_formulas_and_tier_counter_update_live_with_unsaved_values(tmp_
         page.locator('#fc-watch_hours').fill('72')
 
         # Weights: a slider moves its form field, and typing in the field moves the slider.
-        page.locator('#tw-schedule').fill('0'); page.locator('#tw-schedule').dispatch_event('input')
-        expect(page.locator('#fc-schedule')).to_have_value('0')
-        expect(formulas).to_contain_text('demand = (1 × history) / (1)')
-        page.locator('#fc-history').fill('2')
-        expect(page.locator('#tw-history')).to_have_value('2')
-        expect(page.locator('#val-history')).to_have_text('2')
-        expect(formulas).to_contain_text('demand = (2 × history) / (2)')
+        page.locator('#tw-share').fill('100')
+        expect(page.locator('#fc-history_share')).to_have_value('100')
+        expect(formulas).to_contain_text('demand = 100% × history')
+        page.locator('#fc-history_share').fill('75')
+        expect(page.locator('#tw-share')).to_have_value('75')
+        expect(page.locator('#val-share')).to_have_text('75%')
+        expect(formulas).to_contain_text('demand = 75% × history + 25% × schedule')
         page.locator('#tw-override-off').check()
         expect(formulas).to_contain_text('The override is off')
         page.locator('#tw-override-off').uncheck()
-        page.locator('#fc-history').fill('1'); page.locator('#fc-schedule').fill('1')
+        page.locator('#fc-history_share').fill('50')
 
         # An invalid field pauses the preview instead of raising an error.
         page.locator('#fc-safety_hours').fill('')
@@ -667,4 +668,28 @@ def test_settings_formulas_and_tier_counter_update_live_with_unsaved_values(tmp_
         page.locator('#fc-safety_hours').fill('24')
         expect(page.locator('#preview-box')).to_contain_text('Alert (below minimum)')
         expect(count('predicted')).to_have_text('1')
+        s.close()
+
+
+@pytest.mark.browser
+def test_failed_delivery_banner_and_acknowledge_all_label(tmp_path):
+    with running_server(tmp_path) as base, sync_playwright() as p:
+        s = Session(p); page = s.page
+        seed(page, base)
+
+        def failing(route):
+            body = route.fetch().json()
+            body['notifications'] = [dict(id='n1', created_at='2026-10-30T12:00:00+00:00', subject='Stock alert', text='t', digest=False,
+                                          results=[dict(channel='email', status='failed', detail='SMTP error'), dict(channel='teams', status='sent', detail='Posted')])]
+            route.fulfill(json=body)
+        page.route('**/api/stock?*', failing)
+        page.goto(base + '/#stock')
+        banner = page.locator('#delivery-failed')
+        expect(banner).to_contain_text('email failed (SMTP error)')
+        expect(banner).to_contain_text('not retried automatically')
+        expect(banner).not_to_contain_text('teams')
+        expect(page.locator('#clear-alerts')).to_have_text('Acknowledge all below-minimum')
+        page.unroute('**/api/stock?*')
+        page.reload()
+        expect(page.locator('#delivery-failed')).to_have_count(0)
         s.close()

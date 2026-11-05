@@ -7,7 +7,7 @@
 :root{
 /* space */--s1:4px;--s2:8px;--s3:12px;--s4:16px;--s5:24px;--s6:32px;--s7:48px;
 /* type */--font:-apple-system,"Segoe UI",Helvetica,Arial,sans-serif;--t-xs:12px;--t-sm:13px;--t-md:14px;--t-lg:16px;--t-xl:20px;--t-2xl:28px;--lh-data:1.3;--lh-body:1.45;
-/* colour: neutrals */--bg:#f4f5f6;--surface:#fff;--sunken:#eceef0;--ink:#16202a;--ink-2:#3b4752;--muted:#5b6773;--line:#d5d9de;--line-strong:#9aa4ae;
+/* colour: neutrals */--bg:#f4f5f6;--surface:#fff;--sunken:#eceef0;--ink:#17403f;--brand:#009999;--dark:#16202a;--ink-2:#3b4752;--muted:#5b6773;--line:#d5d9de;--line-strong:#9aa4ae;
 /* colour: accent (existing petrol) */--accent:#00757a;--accent-ink:#fff;--accent-wash:#e4f1f1;
 /* colour: status, always paired with a text label */--alert:#b3261e;--alert-wash:#fbe9e7;--predicted:#9a5200;--predicted-wash:#fdf0dc;--watch:#2b5c8a;--watch-wash:#e6eef6;--ok:#2e6b3a;
 /* shape */--radius:2px;--focus:0 0 0 2px #fff,0 0 0 4px var(--accent);--shadow-overlay:0 4px 16px rgba(22,32,42,.18);
@@ -29,14 +29,14 @@ aside a.legacy{font-size:var(--t-sm);color:var(--muted);padding:var(--s1) var(--
 main{padding:var(--s5) var(--s6);min-width:0}
 .legacy-banner{background:var(--predicted-wash);border:1px solid var(--predicted);padding:var(--s2) var(--s3);font-size:var(--t-sm);margin-bottom:var(--s4)}
 header.page{display:flex;justify-content:space-between;align-items:flex-end;gap:var(--s4);border-bottom:1px solid var(--line-strong);padding-bottom:var(--s3);margin-bottom:var(--s4)}
-h1{font-size:var(--t-2xl);line-height:1.15;margin:0;font-weight:700}
+h1{font-size:var(--t-2xl);line-height:1.15;margin:0;font-weight:700;color:var(--brand)}
 .asof{color:var(--muted);font-size:var(--t-sm);margin-top:var(--s1)}
 .btn{font:inherit;font-size:var(--t-sm);font-weight:600;padding:var(--s2) var(--s3);min-height:32px;border:1px solid var(--line-strong);background:var(--surface);color:var(--ink);border-radius:var(--radius);cursor:pointer;transition:background var(--dur)}
 .btn:hover{background:var(--sunken)}.btn.primary{background:var(--accent);border-color:var(--accent);color:var(--accent-ink)}.btn.primary:hover{background:#005c60}
 .strip{display:flex;flex-wrap:wrap;border:1px solid var(--line);background:var(--surface);margin-bottom:var(--s4)}
 .strip div{padding:var(--s3) var(--s4);border-right:1px solid var(--line);min-width:150px;flex:1}
 .strip div:last-child{border-right:0}
-.strip b{display:block;font-size:var(--t-xl);font-weight:700;line-height:1.2}.strip span{font-size:var(--t-sm);color:var(--muted)}
+.strip b{display:block;font-size:var(--t-xl);font-weight:700;line-height:1.2;color:var(--brand)}.strip span{font-size:var(--t-sm);color:var(--muted)}
 .cols{display:grid;grid-template-columns:minmax(0,1fr) 320px;gap:var(--s4);align-items:start}
 .cols>*{min-width:0}.panel{background:var(--surface);border:1px solid var(--line);margin-bottom:var(--s4)}
 .panel>h2{margin:0;padding:var(--s3) var(--s4);font-size:var(--t-md);font-weight:700;border-bottom:1px solid var(--line);display:flex;justify-content:space-between;align-items:center}
@@ -76,7 +76,7 @@ td.act{text-align:right}
 .err{color:var(--alert);font-size:var(--t-sm)}.plain{margin:0;padding-left:var(--s5)}.plain li{margin-bottom:var(--s2)}
 .panel>h2 .btn{margin-left:var(--s3)}.panel>h2{gap:var(--s3)}
 tr[data-pred]{cursor:pointer}
-#toast{position:fixed;bottom:var(--s5);right:var(--s5);background:var(--ink);color:#fff;padding:var(--s3) var(--s4);border-radius:var(--radius);box-shadow:var(--shadow-overlay);max-width:420px;font-size:var(--t-sm);z-index:10}#toast.error{background:var(--alert)}#toast[hidden]{display:none}
+#toast{position:fixed;bottom:var(--s5);right:var(--s5);background:var(--dark);color:#fff;padding:var(--s3) var(--s4);border-radius:var(--radius);box-shadow:var(--shadow-overlay);max-width:420px;font-size:var(--t-sm);z-index:10}#toast.error{background:var(--alert)}#toast[hidden]{display:none}
 .busy{cursor:progress}
 .tag.none{color:var(--muted);background:var(--sunken);border-color:var(--line-strong)}
 tr[data-part]{cursor:pointer}
@@ -112,6 +112,11 @@ table.parts td.flags .tag{margin:0 var(--s1) var(--s1) 0;white-space:nowrap}
 .sub-h{font-weight:600;font-size:var(--t-sm);color:var(--ink-2);margin-bottom:var(--s1)}
 
 #forecast-form{display:grid;grid-template-columns:1fr 1fr;gap:0 var(--s4)}#forecast-form p{grid-column:1/-1}
+.cols.table-first{grid-template-columns:minmax(0,1fr) 284px}
+.strip.compact div{padding:var(--s2) var(--s3);min-width:120px}.strip.compact b{font-size:var(--t-lg)}
+.tools.prominent input:not([type]),.tools.prominent select{min-height:40px;font-size:var(--t-md)}
+.table-first table{font-size:var(--t-md)}.table-first td{height:44px}
+.fail-banner{border:1px solid var(--alert);background:var(--alert-wash);color:var(--alert);padding:var(--s3) var(--s4);margin-bottom:var(--s4);font-size:var(--t-sm)}
 .chips{display:flex;flex-wrap:wrap;gap:var(--s2);margin-bottom:var(--s2)}
 .chip{font:inherit;font-size:var(--t-sm);min-height:32px;padding:var(--s1) var(--s3);border:1px solid var(--line-strong);background:var(--surface);color:var(--ink);border-radius:var(--radius);cursor:pointer}
 .chip[aria-pressed="true"]{background:var(--accent);border-color:var(--accent);color:var(--accent-ink)}.chip:disabled{opacity:.5;cursor:default}
@@ -248,8 +253,8 @@ function nav() {
 function head(title, asof, actions = '') {
   return `<header class="page"><div><h1>${esc(title)}</h1><div class="asof">${asof}</div></div><div class="actions">${actions}</div></header>`;
 }
-function strip(items) {
-  return `<div class="strip">${items.map(([v, l, id]) => `<div><b class="num"${id ? ` id="${id}"` : ''}>${v}</b><span>${esc(l)}</span></div>`).join('')}</div>`;
+function strip(items, cls = '') {
+  return `<div class="strip${cls ? ' ' + cls : ''}">${items.map(([v, l, id]) => `<div><b class="num"${id ? ` id="${id}"` : ''}>${v}</b><span>${esc(l)}</span></div>`).join('')}</div>`;
 }
 function note(title, text, link) {
   return `<section class="panel"><div class="body empty"><b>${esc(title)}</b>${text ? `<p>${text}</p>` : ''}${link ? `<p><a class="btn primary" href="#data">${esc(link)}</a></p>` : ''}</div></section>`;
@@ -267,7 +272,7 @@ function hoursBar(h, tick, scale = 72) {
   scale = scale || 72;
   const w = 140, x = Math.min(h, scale) / scale * w;
   const color = h <= tick ? 'var(--predicted)' : h <= scale ? 'var(--watch)' : 'var(--line-strong)';
-  return `<svg class="hb" viewBox="0 0 ${w} 12" aria-hidden="true"><rect x="0" y="4" width="${w}" height="4" fill="var(--sunken)"/><rect x="0" y="4" width="${x}" height="4" fill="${color}"/><line x1="${Math.min(tick, scale) / scale * w}" x2="${Math.min(tick, scale) / scale * w}" y1="0" y2="12" stroke="var(--ink)"/></svg>`;
+  return `<svg class="hb" viewBox="0 0 ${w} 12" aria-hidden="true"><rect x="0" y="4" width="${w}" height="4" fill="var(--sunken)"/><rect x="0" y="4" width="${x}" height="4" fill="${color}"/><line x1="${Math.min(tick, scale) / scale * w}" x2="${Math.min(tick, scale) / scale * w}" y1="0" y2="12" stroke="var(--dark)"/></svg>`;
 }
 function needData() { return !ds; }
 function noDataPage(title) {
@@ -306,6 +311,11 @@ function stockRows() {
   $('#stock-count').textContent = `${fmt(rows.length)} matching positions · page ${stockPage + 1} of ${pages}`;
   $('#stock-prev').disabled = stockPage === 0; $('#stock-next').disabled = stockPage >= pages - 1;
 }
+function failedBanner(last) {
+  const bad = last ? last.results.filter(r => r.status === 'failed') : [];
+  if (!bad.length) return '';
+  return `<div class="fail-banner" id="delivery-failed" role="alert"><b>Last notification not delivered:</b> ${bad.map(r => esc(r.channel + ' failed' + (r.detail ? ' (' + r.detail + ')' : ''))).join('; ')}. Failed deliveries are not retried automatically. Fix the channel under Delivery, then use Send digest to resend all open alerts.</div>`;
+}
 function stockPageHtml() {
   const title = TITLES.stock;
   if (needData()) return noDataPage(title);
@@ -315,10 +325,11 @@ function stockPageHtml() {
   const empty = d.positions.filter(p => p.status === 'Alert' && p.min === 0).length;
   const chan = ch.email.configured ? `Email to ${esc(ch.email.recipients.join(', '))}` : 'Email not configured (saved to outbox)';
   return head(title, `Phase 1 · snapshot ${d.snapshot_as_of ? esc(d.snapshot_as_of) : 'date not supplied'} · ${esc(ch.rule_text)}`,
-      '<button class="btn" data-stock="check">Run check</button><button class="btn" data-stock="digest">Send digest</button><button class="btn" data-stock="reset">Reset simulated stock</button><button class="btn" id="clear-alerts" data-stock="clear"' + (openBelowMin() ? '' : ' disabled title="No open below-minimum alerts"') + '>Clear all alerts</button>') +
+      '<button class="btn" data-stock="check">Run check</button><button class="btn" data-stock="digest">Send digest</button><button class="btn" data-stock="reset">Reset simulated stock</button><button class="btn" id="clear-alerts" data-stock="clear"' + (openBelowMin() ? '' : ' disabled title="No open below-minimum alerts"') + '>Acknowledge all below-minimum</button>') +
+    failedBanner(last) +
     (d.tolerances_loaded ? '' : '<div class="legacy-banner">Min/Max tolerances not imported. Add the Min/Max file under Data sources to evaluate alerts.</div>') +
-    strip([[fmt(sm.alerts), 'Open alerts', 'stock-alert-count'], [fmt(empty), 'Empty bins, minimum 0'], [fmt(sm.positions), 'Positions checked'], [fmt(sm.overridden), 'Simulated edits']]) +
-    `<div class="cols"><section class="panel"><div class="tools"><input id="stock-search" placeholder="Search material, description, supermarket or bin" value="${esc(stockSearch)}" aria-label="Search stock positions"><select id="stock-filter" aria-label="Stock alert filter"><option value="all">All positions</option><option value="Alert">Alerts</option><option value="OK">OK</option><option value="edited">Simulated edits</option></select></div>
+    strip([[fmt(sm.alerts), 'Open alerts', 'stock-alert-count'], [fmt(empty), 'Empty bins, minimum 0'], [fmt(sm.positions), 'Positions checked'], [fmt(sm.overridden), 'Simulated edits']], 'compact') +
+    `<div class="cols table-first"><section class="panel"><div class="tools prominent"><input id="stock-search" placeholder="Search material, description, supermarket or bin" value="${esc(stockSearch)}" aria-label="Search stock positions"><select id="stock-filter" aria-label="Stock alert filter"><option value="all">All positions</option><option value="Alert">Alerts</option><option value="OK">OK</option><option value="edited">Simulated edits</option></select></div>
 <div class="tw"><table class="w2 stock"><thead id="stock-head"><tr>${sortTh('material', 'Material')}${sortTh('location', 'Location')}<th class="r">Available${sortTh('min', 'Min', 'r')}${sortTh('max', 'Max', 'r')}${sortTh('status', 'Status')}<th></th></tr></thead><tbody id="stock-rows"></tbody></table></div>
 <div class="foot"><span id="stock-count"></span><span><button class="btn small" id="stock-prev">Previous</button> <button class="btn small" id="stock-next">Next</button></span></div></section>
 <div><section class="panel"><h2>Delivery</h2><div class="body"><dl class="kv"><dt>Email<dd>${chan}<dt>Teams<dd>${ch.teams.configured ? 'Connected' : 'Not configured'}<dt>Webhook<dd>${ch.webhook.configured ? 'Connected' : 'Not configured'}</dl><div class="note">Every change is sent once, with only the changes. Edit Available to simulate a reading; source files never change.</div></div></section>
@@ -379,8 +390,8 @@ function projection(p, tick, scale) {
   return `<svg viewBox="0 0 ${W} ${H}" width="100%" role="img" aria-label="${hit ? `Projected stock reaches the minimum in ${fmtHours(p.hours_to_min)}` : 'Projected stock over the next 72 hours'}">
 <rect x="${x0}" y="${y0}" width="${x(Math.min(tick, scale)) - x0}" height="${y1 - y0}" fill="var(--predicted-wash)"/>
 <line x1="${x0}" x2="${x1}" y1="${y(p.min)}" y2="${y(p.min)}" stroke="var(--alert)" stroke-dasharray="4 3"/><text x="${x1 + 2}" y="${y(p.min) + 4}">min</text>
-<line x1="${x0}" y1="${y(p.available)}" x2="${x1}" y2="${y(endV)}" stroke="var(--ink)" stroke-width="2"/>
-${hit ? `<circle cx="${x(p.hours_to_min)}" cy="${y(p.min)}" r="4" fill="var(--ink)"/>` : ''}
+<line x1="${x0}" y1="${y(p.available)}" x2="${x1}" y2="${y(endV)}" stroke="var(--dark)" stroke-width="2"/>
+${hit ? `<circle cx="${x(p.hours_to_min)}" cy="${y(p.min)}" r="4" fill="var(--dark)"/>` : ''}
 <line x1="${x0}" x2="${x0}" y1="${y0}" y2="${y1}" stroke="var(--line-strong)"/><line x1="${x0}" x2="${x1}" y1="${y1}" y2="${y1}" stroke="var(--line-strong)"/>
 <text x="${x0 - 6}" y="${y(p.available) + 4}" text-anchor="end">${fmt(p.available)}</text><text x="${x0 - 6}" y="${y1 + 4}" text-anchor="end">0</text>
 <text x="${x0}" y="137">now</text>${tick / scale > 0.15 ? `<text x="${x(Math.min(tick, scale))}" y="137" text-anchor="middle">${fmt(tick, 0)} h</text>` : ""}<text x="${x1}" y="137" text-anchor="end">${scale} h</text></svg>`;
@@ -421,8 +432,8 @@ function predPageHtml() {
   const sel = d.positions.find(p => p.key === selected) || shown[0] || null; selected = sel ? sel.key : null;
   const withRate = (cs.below_min || 0) + (cs.predicted || 0) + (cs.watch || 0) + (cs.ok || 0);
   return head(title, `Phase 2 · stock as of ${d.snapshot_as_of ? esc(d.snapshot_as_of) : 'undated snapshot'} · ${fmt(withRate)} positions with a demand rate · warns when hours to minimum ≤ lead time + ${fmt(fs.safety_hours)} h`) +
-    strip([[fmt(cs.predicted), 'Predicted, emailed', 'stock-predicted-count'], [fmt(cs.watch), `Watch within ${fmt(fs.watch_hours)} h`, 'stock-watch-count'], [fmt(cs.below_min), 'Already below minimum'], [fmt(cs.no_rate), 'No rate, not forecast']]) + noRateReasonsHtml(d) +
-    `<div class="cols"><section class="panel"><div class="tools"><input id="pred-search" placeholder="Search material, description, supermarket or bin" value="${esc(predSearch)}" aria-label="Search predicted alerts"><select id="pred-filter" aria-label="Predicted alert filter"><option value="act">Predicted, Watch and below minimum</option><option value="rate">All with a demand rate</option><option value="norate">No demand rate</option><option value="all">All positions</option></select></div>
+    strip([[fmt(cs.predicted), 'Predicted, emailed', 'stock-predicted-count'], [fmt(cs.watch), `Watch within ${fmt(fs.watch_hours)} h`, 'stock-watch-count'], [fmt(cs.below_min), 'Already below minimum'], [fmt(cs.no_rate), 'No rate, not forecast']], 'compact') + noRateReasonsHtml(d) +
+    `<div class="cols table-first"><section class="panel"><div class="tools prominent"><input id="pred-search" placeholder="Search material, description, supermarket or bin" value="${esc(predSearch)}" aria-label="Search predicted alerts"><select id="pred-filter" aria-label="Predicted alert filter"><option value="act">Predicted, Watch and below minimum</option><option value="rate">All with a demand rate</option><option value="norate">No demand rate</option><option value="all">All positions</option></select></div>
 <div class="tw"><table class="w2 pred"><thead><tr><th>Material<th>Location<th class="r">Available<th class="r">Min<th class="r">Demand / day<th>Hours to minimum<th>Tier</tr></thead><tbody id="pred-rows">${shown.map(p => {
       const [tc, tt] = tierOf(p), tick = p.lead_hours + fs.safety_hours;
       return `<tr data-pred="${esc(p.key)}" class="${p.key === selected ? 'sel' : ''}" tabindex="0"><td>${esc(p.description || p.material)}<small>${esc(p.material)}</small></td><td>${esc(p.supermarket)}<small>${esc(p.storage_type)} / ${esc(p.bin)}</small></td><td class="r">${fmt(p.available)}</td><td class="r">${fmt(p.min)}</td><td class="r">${p.demand_per_day == null ? '—' : fmt(p.demand_per_day, 2)}</td><td>${p.hours_to_min == null ? '—' : hoursBar(p.hours_to_min, tick, fs.watch_hours) + `<span class="num">${fmtHours(p.hours_to_min)}</span>`}</td><td>${tag(tc, tt)}${p.no_rate_reason ? `<small class="why">${esc(NO_RATE_SHORT[p.no_rate_reason] || '')}</small>` : ''}</td></tr>`;
@@ -452,7 +463,7 @@ function refillDots(refills) {
     const cx = Math.round(pct / 100 * (w - 10) + 5);
     return `<circle cx="${cx}" cy="7" r="3" fill="var(--accent)"/>`;
   }).join('');
-  return `<svg class="rdot" viewBox="0 0 ${w} ${h}" width="${w}" height="${h}" role="img" aria-label="${refills.length} refills"><line x1="5" x2="${w - 5}" y1="7" y2="7" stroke="var(--line)"/><line x1="${w - 5}" x2="${w - 5}" y1="1" y2="13" stroke="var(--ink)" stroke-width="1.5"/>${dots}</svg>`;
+  return `<svg class="rdot" viewBox="0 0 ${w} ${h}" width="${w}" height="${h}" role="img" aria-label="${refills.length} refills"><line x1="5" x2="${w - 5}" y1="7" y2="7" stroke="var(--line)"/><line x1="${w - 5}" x2="${w - 5}" y1="1" y2="13" stroke="var(--dark)" stroke-width="1.5"/>${dots}</svg>`;
 }
 function partDetailHtml(p) {
   if (!p) return '<section class="panel"><h2>Part detail</h2><div class="body"><div class="note">Select a part to view refill history and evidence.</div></div></section>';
@@ -679,11 +690,19 @@ function bindData() {
 
 /* ---------- Settings ---------- */
 const TIER_NAMES = {within_lead: 'Predicted', watch: 'Watch', below_min: 'Alert', ok: 'OK', no_rate: 'No rate'};
-const FORM_KEYS = ['lead_hours_stocked', 'lead_hours_fab', 'safety_hours', 'watch_hours', 'history', 'schedule', 'observed', 'divergence_pct'];
+const FORM_KEYS = ['lead_hours_stocked', 'lead_hours_fab', 'safety_hours', 'watch_hours', 'history_share', 'observed', 'divergence_pct'];
+/* History and schedule are one ratio: raising one lowers the other. 50 % keeps the saved 1 : 1 weights. */
+function shareOf(h, s) { return h + s > 0 ? Math.round(h / (h + s) * 100) : 50; }
+function ratioNote(share) { return `History ${fmt(share)}% · schedule ${fmt(100 - share)}% of the demand estimate (history : schedule = ${fmt(share)} : ${fmt(100 - share)}).`; }
+function setShare(v) {
+  liveWeights.share = v; liveWeights.history = v / 50; liveWeights.schedule = (100 - v) / 50;
+  const sl = $('#tw-share'), val = $('#val-share'), note = $('#ratio-note'), fc = $('#fc-history_share');
+  if (sl) sl.value = v; if (val) val.textContent = fmt(v) + '%'; if (note) note.textContent = ratioNote(v); if (fc && Number(fc.value) !== v) fc.value = v;
+}
 function savedForm() {
   const fs = stock.forecast.settings;
   return {lead_hours_stocked: fs.lead_hours_stocked, lead_hours_fab: fs.lead_hours_fab, safety_hours: fs.safety_hours, watch_hours: fs.watch_hours,
-    history: fs.weights.history, schedule: fs.weights.schedule, observed: fs.weights.observed, divergence_pct: fs.divergence_pct};
+    history_share: shareOf(fs.weights.history, fs.weights.schedule), history: fs.weights.history, schedule: fs.weights.schedule, observed: fs.weights.observed, divergence_pct: fs.divergence_pct};
 }
 /* The eight form fields are the single source of truth for the live preview; null when any is not a number of zero or more. */
 function readForm() {
@@ -694,13 +713,16 @@ function readForm() {
     if (v === '' || !Number.isFinite(Number(v)) || Number(v) < 0) return null;
     out[k] = Number(v);
   }
+  if (out.history_share > 100) return null;
+  out.history = liveWeights.history; out.schedule = liveWeights.schedule;
   return out;
 }
 function withOverride(v) { return liveWeights && liveWeights.override_off ? {...v, divergence_pct: 1000} : v; }
 function formulasHtml(v) {
   const n = x => fmt(x, 2).replace(/\.00$/, ''), w = v;
   const terms = [['history', w.history], ['schedule', w.schedule], ['observed', w.observed]].filter(([, x]) => x > 0);
-  const demand = terms.length ? `(${terms.map(([k, x]) => `${n(x)} × ${k}`).join(' + ')}) / (${terms.map(([, x]) => n(x)).join(' + ')})` : 'no input has a weight above 0, so no position has a rate';
+  const total = terms.reduce((a, [, x]) => a + x, 0);
+  const demand = terms.length ? terms.map(([k, x]) => `${n(x / total * 100)}% × ${k}`).join(' + ') : 'no input has a weight above 0, so no position has a rate';
   const override = w.divergence_pct >= 1000 ? 'The override is off: history is never dropped.'
     : `If |schedule − history| / history × 100 > ${n(w.divergence_pct)}, history is dropped and demand = schedule.`;
   const tick = x => `${n(x)} + ${n(w.safety_hours)} = ${n(x + w.safety_hours)} h`;
@@ -782,6 +804,7 @@ function settingsPageHtml() {
     liveWeights = {
       history: fs.weights.history,
       schedule: fs.weights.schedule,
+      share: shareOf(fs.weights.history, fs.weights.schedule),
       observed: fs.weights.observed,
       divergence_pct: fs.divergence_pct,
       override_off: fs.divergence_pct >= 1000
@@ -792,8 +815,7 @@ function settingsPageHtml() {
     ['lead_hours_fab', 'Fab lead time (h)', fs.lead_hours_fab],
     ['safety_hours', 'Safety buffer (h)', fs.safety_hours],
     ['watch_hours', 'Watch window (h)', fs.watch_hours],
-    ['history', 'History weight', liveWeights.history],
-    ['schedule', 'Schedule weight', liveWeights.schedule],
+    ['history_share', 'History share (%), schedule gets the rest', liveWeights.share],
     ['observed', 'Observed weight', liveWeights.observed],
     ['divergence_pct', 'Divergence threshold (%)', liveWeights.override_off ? fs.divergence_pct : liveWeights.divergence_pct]
   ];
@@ -813,15 +835,11 @@ function settingsPageHtml() {
         <h2>Try weights</h2>
         <div class="body">
           <div class="slider-grid">
-            <label for="tw-history">History</label>
-            <input id="tw-history" type="range" min="0" max="3" step="0.5" value="${liveWeights.history}" aria-label="History">
-            <span class="val" id="val-history">${fmt(liveWeights.history, 1)}</span>
+            <label for="tw-share">History share</label>
+            <input id="tw-share" type="range" min="0" max="100" step="5" value="${liveWeights.share}" aria-label="History share of the demand estimate, in percent" aria-describedby="ratio-note">
+            <span class="val" id="val-share">${fmt(liveWeights.share)}%</span>
           </div>
-          <div class="slider-grid">
-            <label for="tw-schedule">Schedule</label>
-            <input id="tw-schedule" type="range" min="0" max="3" step="0.5" value="${liveWeights.schedule}" aria-label="Schedule">
-            <span class="val" id="val-schedule">${fmt(liveWeights.schedule, 1)}</span>
-          </div>
+          <div class="note" id="ratio-note">${ratioNote(liveWeights.share)}</div>
           <div class="slider-grid">
             <label for="tw-observed">Observed</label>
             <input id="tw-observed" type="range" min="0" max="3" step="0.5" value="${liveWeights.observed}" aria-label="Observed">
@@ -898,9 +916,10 @@ function bindSettings() {
     const body = {weights: {}};
     document.querySelectorAll('[data-fc]').forEach(i => {
       const k = i.dataset.fc;
-      if (['history', 'schedule', 'observed'].includes(k)) body.weights[k] = i.value;
-      else body[k] = i.value;
+      if (k === 'observed') body.weights.observed = i.value;
+      else if (k !== 'history_share') body[k] = i.value;
     });
+    body.weights.history = liveWeights.history; body.weights.schedule = liveWeights.schedule;
     if (busy) return; busy = true; document.body.classList.add('busy');
     try {
       const r = await api('/api/stock/settings', {dataset: ds, ...body});
@@ -924,14 +943,14 @@ function bindSettings() {
       triggerPreview();
     });
   };
-  bindSlider('history', 'history', false);
-  bindSlider('schedule', 'schedule', false);
+  $('#tw-share')?.addEventListener('input', e => { setShare(parseFloat(e.target.value)); triggerPreview(); });
   bindSlider('observed', 'observed', false);
   bindSlider('divergence', 'divergence_pct', true);
 
   document.querySelectorAll('[data-fc]').forEach(i => i.addEventListener('input', () => {
-    const k = i.dataset.fc, v = Number(i.value), sl = {history: 'history', schedule: 'schedule', observed: 'observed', divergence_pct: 'divergence'}[k];
-    if (sl && i.value.trim() !== '' && Number.isFinite(v)) {
+    const k = i.dataset.fc, v = Number(i.value), sl = {observed: 'observed', divergence_pct: 'divergence'}[k];
+    if (k === 'history_share' && i.value.trim() !== '' && Number.isFinite(v) && v >= 0 && v <= 100) setShare(v);
+    else if (sl && i.value.trim() !== '' && Number.isFinite(v)) {
       liveWeights[k] = v;
       const el = $('#tw-' + sl), val = $('#val-' + sl);
       if (el) el.value = v;
@@ -1036,9 +1055,9 @@ document.addEventListener('click', e => {
   if (kind === 'check') stockPost('/api/stock/check', {});
   else if (kind === 'digest' && armed(b, 'Click again to send')) stockPost('/api/stock/digest', {});
   else if (kind === 'reset' && armed(b, 'Click again to reset')) stockPost('/api/stock/reset', {});
-  else if (kind === 'clear' && armed(b, `Click again to clear ${openBelowMin()}`)) guarded(async () => {
+  else if (kind === 'clear' && armed(b, `Click again to acknowledge ${openBelowMin()}`)) guarded(async () => {
     const r = await api('/api/stock/ack-all', {dataset: ds}); await loadStock();
-    toast(`${r.acknowledged} alert(s) cleared. Stock levels unchanged.`);
+    toast(`${r.acknowledged} alert(s) acknowledged. Stock levels unchanged; predicted alerts are left open.`);
   });
 });
 function route() { const h = location.hash.slice(1); view = TITLES[h] ? h : 'stock'; render(); }

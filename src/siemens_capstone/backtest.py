@@ -33,7 +33,7 @@ def _blends(history, schedule):
     both = {k for k in history if schedule.get(k) is not None}
     result = {'history_only_when_both': {k: history[k] for k in both}}
     for name, history_weight, divergence in [('blend_current', 1, 50), ('blend_no_override', 1, 1000),
-                                            ('blend_history_2to1', 2, 1000)]:
+                                            ('blend_history_2to1', 2, 1000), ('blend_history_2to1_override50', 2, 50)]:
         result[name] = {k: proactive.blend_rate(history[k], schedule.get(k), None,
                                               dict(history=history_weight, schedule=1, observed=0), divergence)['rate']
                         for k in history}

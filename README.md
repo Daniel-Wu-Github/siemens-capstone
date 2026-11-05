@@ -14,7 +14,15 @@ python3 -m venv .venv
 .venv/bin/python server.py
 ```
 
-Open **http://127.0.0.1:8765**. If your system Python is older, use `uv venv --python 3.11` followed by `uv pip install --python .venv/bin/python -r requirements.txt` instead.
+On Windows (PowerShell or Command Prompt) use the venv's `Scripts` folder instead:
+
+```bat
+py -3.11 -m venv .venv
+.venv\Scripts\python -m pip install -r requirements.txt
+.venv\Scripts\python server.py
+```
+
+Open **http://127.0.0.1:8765**. If that port is busy the server says so; start it on another port with `server.py --port 8766` and open that address. The server listens on this computer only and has no login, so do not expose it to a network. Nothing is emailed unless SMTP settings are configured (see [docs/alerts.md](docs/alerts.md)); without them every notification is saved as a file under `outputs/outbox`. If your system Python is older, use `uv venv --python 3.11` followed by `uv pip install --python .venv/bin/python -r requirements.txt` instead.
 
 The app has three main pages and two setup pages:
 - **Stock alerts** (Phase 1): Lists bins at or below their minimum tolerance and dispatches alerts.
