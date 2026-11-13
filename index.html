@@ -116,17 +116,13 @@ table.parts td.flags .tag{margin:0 var(--s1) var(--s1) 0;white-space:nowrap}
 .strip.compact div{padding:var(--s2) var(--s3);min-width:120px}.strip.compact b{font-size:var(--t-lg)}
 .tools.prominent input:not([type]),.tools.prominent select{min-height:40px;font-size:var(--t-md)}
 .table-first table{font-size:var(--t-md)}.table-first td{height:44px}
-#pred-detail{display:grid;grid-template-columns:minmax(0,1.3fr) minmax(320px,1fr);gap:var(--s4);margin-bottom:var(--s4);align-items:start}
+#pred-detail{display:grid;grid-template-columns:minmax(0,1.4fr) minmax(320px,1fr);gap:var(--s4);margin-bottom:var(--s4);align-items:stretch}
 @media(max-width:1100px){#pred-detail{grid-template-columns:1fr}}
-.pred-chart-card{background:var(--surface);border:1px solid var(--line);margin-bottom:0}
-.pred-chart-card>h2{margin:0;padding:var(--s2) var(--s3);font-size:var(--t-sm);font-weight:700;border-bottom:1px solid var(--line);display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:var(--s1)}
-.pred-chart-card .body{padding:var(--s3) var(--s3) var(--s2)}
-.pred-side-cards{display:flex;flex-direction:column;gap:var(--s3)}
-.pred-side-cards .panel{margin-bottom:0}
-.pred-side-cards .panel>h2{margin:0;padding:var(--s2) var(--s3);font-size:var(--t-sm);font-weight:700;border-bottom:1px solid var(--line);display:flex;justify-content:space-between;align-items:center}
-.pred-side-cards .body{padding:var(--s2) var(--s3)}
+.pred-chart-card,.pred-calc-card{background:var(--surface);border:1px solid var(--line);margin-bottom:0;display:flex;flex-direction:column}
+.pred-chart-card>h2,.pred-calc-card>h2{margin:0;padding:var(--s2) var(--s3);font-size:var(--t-sm);font-weight:700;border-bottom:1px solid var(--line);display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:var(--s1);min-height:38px}
+.pred-chart-card .body,.pred-calc-card .body{padding:var(--s3);flex:1;display:flex;flex-direction:column}
 .pred-chart svg{display:block;width:100%;height:auto;max-height:220px}
-.pred-info{display:flex;flex-wrap:wrap;gap:var(--s2) var(--s3);padding:var(--s2) 0 0;border-top:1px solid var(--line);font-size:var(--t-sm);color:var(--ink-2);margin-top:var(--s2)}
+.pred-info{display:flex;flex-wrap:wrap;gap:var(--s2) var(--s4);padding:var(--s2) 0 0;border-top:1px solid var(--line);font-size:var(--t-sm);color:var(--ink-2);margin-top:auto}
 .pred-info dt{color:var(--muted);font-size:var(--t-xs)}.pred-info dd{margin:0;font-weight:600}
 .fail-banner{border:1px solid var(--alert);background:var(--alert-wash);color:var(--alert);padding:var(--s3) var(--s4);margin-bottom:var(--s4);font-size:var(--t-sm)}
 .chips{display:flex;flex-wrap:wrap;gap:var(--s2);margin-bottom:var(--s2)}
@@ -471,10 +467,7 @@ function calcStepsHtml(p, fs) {
   if (p.hours_to_min != null && p.demand_per_day) steps.push(['Hours to minimum', `max(0, ${fmt(p.available)} − ${fmt(p.min)}) / ${fmt(p.demand_per_day, 2)} × 24 = ${fmtHours(p.hours_to_min)}`]);
   steps.push(['Alert threshold', `lead ${fmt(p.lead_hours, 1)} h + safety ${fmt(fs.safety_hours, 1)} h = ${fmt(tick, 1)} h`]);
   steps.push(['Suggested quantity', p.suggested_qty == null ? '—' : fmt(p.suggested_qty)]);
-  return `<div class="pred-side-cards">
-<section class="panel"><h2>How it was calculated</h2><div class="body">${steps.map(([a, b]) => `<div class="step"><span>${esc(a)}</span><span class="num">${esc(b)}</span></div>`).join('')}</div></section>
-<section class="panel"><h2>Settings <a class="btn small" href="#settings">Edit</a></h2><div class="body"><dl class="kv"><dt>Lead time<dd>${fmt(fs.lead_hours_stocked, 1)} h stocked · ${fmt(fs.lead_hours_fab, 1)} h fab<dt>Safety buffer<dd>${fmt(fs.safety_hours, 1)} h<dt>Watch window<dd>${fmt(fs.watch_hours, 1)} h<dt>Weights<dd>history ${fmt(fs.weights.history, 1)} · schedule ${fmt(fs.weights.schedule, 1)} · observed ${fmt(fs.weights.observed, 1)}<dt>Divergence<dd>${fmt(fs.divergence_pct)}%</dl></div></section>
-</div>`;
+  return `<section class="panel pred-calc-card"><h2>How it was calculated <a class="btn small" href="#settings">Edit</a></h2><div class="body">${steps.map(([a, b]) => `<div class="step"><span>${esc(a)}</span><span class="num">${esc(b)}</span></div>`).join('')}</div></section>`;
 }
 function detailHtml(p, fs) {
   return calcStepsHtml(p, fs);
