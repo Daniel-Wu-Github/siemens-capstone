@@ -545,3 +545,20 @@ def test_shipped_defaults_blend_two_to_one_and_never_drop_history():
     assert p['demand_per_day'] == pytest.approx((2 * 10 + 30) / 3) and p['demand_basis'] == ['history', 'schedule']
     p = run(item(), [inv(replen=10.0, planned=900.0, bom_status='ok')], settings(divergence_pct=50))
     assert p['demand_dropped'] == ['history'] and p['demand_per_day'] == 30.0                  # the earlier rule is one setting away
+
+
+def test_rate_window_days_setting_validation():
+    settings = proactive.default_settings()
+    assert settings['rate_window_days'] == 30
+    valid = proactive.validate_settings(settings, {'rate_window_days': 60})
+    assert valid['rate_window_days'] == 60
+    with pytest.raises(ValueError, match='30, 45 or 60'):
+        proactive.validate_settings(settings, {'rate_window_days': 20})
+    with pytest.raises(ValueError, match='30, 45 or 60'):
+        proactive.validate_settings(settings, {'rate_window_days': 42})
+
+
+def test_rate_window_days_in_env():
+    settings = proactive.default_settings({'RATE_WINDOW_DAYS': '60'})
+    assert settings['rate_window_days'] == 60
+

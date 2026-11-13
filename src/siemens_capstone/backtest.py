@@ -143,3 +143,68 @@ def to_markdown(report):
         table(section['label'] + ' — common subset', section['common_subset']['variants'])
     lines.extend(report['notes'])
     return '\n'.join(lines) + '\n'
+
+
+def evaluate_windows(records, date_system='1900', references=None):
+    """Compare 30, 45, and 60 day rate windows on the holdout."""
+    references = references or {}
+    transfers, quality = analytics.parsed_transfers(records, date_system)
+    events = [e for e in transfers if e['category'] == 'replenishment']
+    if not events:
+        raise ValueError('No valid replenishment events.')
+    latest = max(e['confirmed'].date() for e in events)
+    holdout_start = latest - timedelta(days=29)
+
+    inventory = analytics.analyze({'BIN_STATUS_EXAMPLE': records.get('BIN_STATUS_EXAMPLE', [])},
+                                  date_system, references)['inventory']
+    positions = {p['id']: p for p in inventory}
+    lookup = defaultdict(list)
+    for k, p in positions.items():
+        lookup[p['material'], p['bin']].append(k)
+
+    actual = dict.fromkeys(positions, 0.0)
+    for e in events:
+        day = e['confirmed'].date()
+        if not holdout_start <= day <= latest:
+            continue
+        candidates = lookup[e['material'], e['bin']]
+        if e['storage_type']:
+            candidates = [k for k in candidates if positions[k]['storage_type'] == e['storage_type']]
+        if len(candidates) != 1:
+            continue
+        actual[candidates[0]] += e['quantity'] / 30
+
+    results = {}
+    for window in (30, 45, 60):
+        training_start = holdout_start - timedelta(days=window)
+        training_end = holdout_start - timedelta(days=1)
+        history = dict.fromkeys(positions, 0.0)
+        for e in events:
+            day = e['confirmed'].date()
+            if not training_start <= day <= training_end:
+                continue
+            candidates = lookup[e['material'], e['bin']]
+            if e['storage_type']:
+                candidates = [k for k in candidates if positions[k]['storage_type'] == e['storage_type']]
+            if len(candidates) != 1:
+                continue
+            history[candidates[0]] += e['quantity'] / window
+        pairs = [(actual[k], history[k]) for k in actual]
+        results[f'flat{window}'] = metrics(pairs)
+
+    return dict(disclaimer='Compares rate window sizes on the same holdout.',
+                holdout=dict(start=holdout_start.isoformat(), end=latest.isoformat()),
+                windows=results)
+
+
+def to_markdown_windows(report):
+    lines = [report['disclaimer'], '',
+             f"Holdout: {report['holdout']['start']} to {report['holdout']['end']} (30 days).", '',
+             '| Window | n | MAE (units/day) | Median absolute % error | Mean bias | Share within ±50% |',
+             '| --- | ---: | ---: | ---: | ---: | ---: |']
+    for name, m in report['windows'].items():
+        values = ['—' if m[k] is None else f'{m[k]:.6g}' for k in
+                  ('n', 'mae', 'median_absolute_pct_error', 'mean_bias', 'share_within_50pct')]
+        lines.append('| ' + ' | '.join([name] + values) + ' |')
+    return '\n'.join(lines) + '\n'
+

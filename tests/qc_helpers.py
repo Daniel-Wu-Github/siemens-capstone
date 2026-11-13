@@ -120,12 +120,13 @@ class Sink:
     def close(self): self.server.shutdown(); self.server.server_close(); self.thread.join()
 
 
-def analysis(bins, tolerances=None, transfers=(), production=(), schedule=(), bom=None, snapshots=None):
+def analysis(bins, tolerances=None, transfers=(), production=(), schedule=(), bom=None, snapshots=None, window_days_override=None):
     """Run analytics.analyze on in-memory records (dict rows)."""
     from siemens_capstone.analytics import analyze
     records = {'BIN_STATUS_EXAMPLE': list(bins), 'HISTORICAL_SM_REPLENISHMENTS': list(transfers),
                'HISTORICAL_PROD_DATA': list(production), 'PLANNED_PROD_SCHEDULE': list(schedule)}
-    return analyze(records, '1900', {'tolerances': tolerances, 'bom': bom, 'snapshots': snapshots or []})
+    return analyze(records, '1900', {'tolerances': tolerances, 'bom': bom, 'snapshots': snapshots or []},
+                   window_days_override=window_days_override)
 
 
 def bin_row(material, bin_, stock, typ='401', unit='PC', desc='Synthetic part'):
@@ -138,7 +139,14 @@ def tol_row(part, loc, mn, mx, typ=401):
 
 
 def transfer_row(n, material, bin_, qty, day, src='001', dest='401'):
-    d = f'2026-10-{day:02d}T00:00:00'
+    from datetime import date, timedelta
+    if isinstance(day, int):
+        if 1 <= day <= 31:
+            d = f'2026-10-{day:02d}T00:00:00'
+        else:
+            d = (date(2026, 10, 1) + timedelta(days=day - 1)).isoformat() + 'T00:00:00'
+    else:
+        d = str(day) if 'T' in str(day) else str(day) + 'T00:00:00'
     return {'Transfer Order Number': str(n), 'Transfer order item': '1', 'Material': material, 'Source Storage Type': src,
             'Dest. Storage Type': dest, 'Dest.Storage Bin': bin_, 'Dest.target quantity': qty,
             '_created_at_local': d, '_confirmed_at_local': d}

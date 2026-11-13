@@ -161,3 +161,11 @@ def test_common_subset_has_identical_eligible_cohort_for_every_variant():
     assert common['positions'] == 1
     assert common['variants']['history']['n'] == common['variants']['schedule']['n'] == 1
     assert common['variants']['schedule']['mae'] == 1
+
+
+def test_window_comparison_includes_30_45_60():
+    result = backtest.evaluate_windows(records(), '1900', REFS)
+    assert set(result['windows'].keys()) == {'flat30', 'flat45', 'flat60'}
+    for v in result['windows'].values():
+        assert 'mae' in v and 'n' in v
+

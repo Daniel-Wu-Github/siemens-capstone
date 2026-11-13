@@ -467,3 +467,33 @@ def test_http_unknown_phase2_route_is_404_and_get_is_not_supported(ready):
     with serving(store) as base:
         assert call(base, '/api/stock/nothing', {'dataset': ds})[0] == 404
         assert call(base, f'/api/stock/check?dataset={ds}')[0] == 404                    # GET has no such route
+
+
+def test_rate_window_days_setting_round_trip(ready):
+    store, ds, _ = ready
+    assert store.stock_settings(ds)['rate_window_days'] == 30
+    res = store.update_stock_settings(ds, {'rate_window_days': 60})
+    assert res['settings']['rate_window_days'] == 60
+    assert store.stock_settings(ds)['rate_window_days'] == 60
+    with pytest.raises(ValueError, match='30, 45 or 60'):
+        store.update_stock_settings(ds, {'rate_window_days': 20})
+
+
+def test_insights_parts_window_query_param_validation_and_passthrough(tmp_path):
+    t_span = [
+        ['T1', 1, 'PRED', '001', '401', 'BP', 100, datetime(2026, 10, 1), 0, datetime(2026, 10, 1), 0],
+        ['T2', 1, 'PRED', '001', '401', 'BP', 100, datetime(2026, 11, 29), 0, datetime(2026, 11, 29), 0]
+    ]
+    store, ds = build(tmp_path, transfers=t_span)
+    with serving(store) as base:
+        status, body = call(base, f'/api/insights/parts?dataset={ds}&window=60')
+        assert status == 200 and body['window_days'] == 60
+        status, body = call(base, f'/api/insights/parts?dataset={ds}&window=45')
+        assert status == 200 and body['window_days'] == 45
+        status, body = call(base, f'/api/insights/parts?dataset={ds}&window=30')
+        assert status == 200 and body['window_days'] == 30
+        status, body = call(base, f'/api/insights/parts?dataset={ds}&window=20')
+        assert status == 400 and 'window must be 30, 45 or 60.' in body['error']
+        status, body = call(base, f'/api/insights/parts?dataset={ds}&window=invalid')
+        assert status == 400 and 'window must be 30, 45 or 60.' in body['error']
+

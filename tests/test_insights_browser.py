@@ -83,3 +83,19 @@ def test_insights_page_viewports_no_horizontal_overflow(tmp_path, clean_env, wid
         assert page.evaluate("[...document.querySelectorAll('.tw')].every(t => t.scrollWidth <= t.clientWidth + 1)"), 'table needs sideways scrolling'
         assert not errors
         browser.close()
+
+
+@pytest.mark.browser
+def test_insights_rate_window_toggle(tmp_path, clean_env):
+    with running_server(tmp_path) as base, sync_playwright() as p:
+        browser, page, ds, errors = open_insights_page(p, base)
+        toggle = page.locator('#window-toggle')
+        expect(toggle).to_be_visible()
+        btn45 = toggle.locator('button[data-window="45"]')
+        with page.expect_response('**/api/stock/settings') as info:
+            btn45.click()
+        assert info.value.status == 200
+        expect(btn45).to_have_attribute('aria-pressed', 'true')
+        assert not errors
+        browser.close()
+
