@@ -128,6 +128,11 @@ table.parts td.flags .tag{margin:0 var(--s1) var(--s1) 0;white-space:nowrap}
 th.sortable button{font:inherit;font-weight:inherit;color:inherit;background:none;border:0;padding:0;width:100%;text-align:inherit;cursor:pointer;white-space:nowrap;text-decoration:underline dotted var(--line-strong);text-underline-offset:4px}
 th.sortable button:hover::after,th.sortable button:focus-visible::after{content:" ↕";color:var(--line-strong)}th[aria-sort="ascending"] button::after{content:" ▲";color:var(--accent)}th[aria-sort="descending"] button::after{content:" ▼";color:var(--accent)}
 .why{font-size:var(--t-xs);color:var(--muted)}
+.seg{display:inline-flex;border:1px solid var(--line-strong);border-radius:var(--radius);overflow:hidden;font-size:var(--t-xs)}
+.seg button{border:none;background:var(--surface);padding:var(--s1) var(--s3);cursor:pointer;font:inherit;font-size:var(--t-xs);font-weight:600;color:var(--ink-2);border-right:1px solid var(--line-strong)}
+.seg button:last-child{border-right:0}
+.seg button[aria-pressed="true"]{background:var(--accent);color:var(--accent-ink)}
+.seg button:hover:not([aria-pressed="true"]){background:var(--sunken)}
 @media(prefers-reduced-motion:reduce){*{transition:none!important}}
 </style>
 </head>
@@ -154,6 +159,7 @@ let partsData = null, partsFor = null, partsFlags = [], partsShowAll = false, pa
 let partsThresholds = {refill_pct: 50, refills: 8, divergence: 50, min_refills: 3};
 let refNote = '';
 let liveWeights = null, previewResult = null, previewTimer = null, previewSeq = 0, presets = [], presetsFor = null;
+let rateWindow = 30;
 
 function toast(message, error = false) {
   const t = $('#toast'); t.textContent = message; t.className = error ? 'error' : ''; t.hidden = false;
@@ -185,7 +191,14 @@ async function loadDatasets() {
 }
 async function loadStock() {
   const requested = ds;
-  try { const d = await api('/api/stock?dataset=' + encodeURIComponent(requested)); if (requested !== ds) return; stock = d; }
+  try {
+    const d = await api('/api/stock?dataset=' + encodeURIComponent(requested));
+    if (requested !== ds) return;
+    stock = d;
+    if (stock && stock.forecast && stock.forecast.settings && stock.forecast.settings.rate_window_days) {
+      rateWindow = stock.forecast.settings.rate_window_days;
+    }
+  }
   catch (e) { stock = {error: e.message}; }
   stockFor = requested;
   if (view === 'stock' || view === 'predicted' || view === 'settings') render();
@@ -205,7 +218,8 @@ async function loadPartsInsights() {
     refill_pct: partsThresholds.refill_pct,
     refills: partsThresholds.refills,
     divergence: partsThresholds.divergence,
-    min_refills: partsThresholds.min_refills
+    min_refills: partsThresholds.min_refills,
+    window: rateWindow
   });
   try {
     const d = await api('/api/insights/parts?' + q);
@@ -255,6 +269,25 @@ function head(title, asof, actions = '') {
 }
 function strip(items, cls = '') {
   return `<div class="strip${cls ? ' ' + cls : ''}">${items.map(([v, l, id]) => `<div><b class="num"${id ? ` id="${id}"` : ''}>${v}</b><span>${esc(l)}</span></div>`).join('')}</div>`;
+}
+function windowToggle(current) {
+  return `<div class="seg" id="window-toggle" role="group" aria-label="Rate window">
+    ${[30, 45, 60].map(d => `<button type="button" data-window="${d}" aria-pressed="${current === d}">${d} d</button>`).join('')}
+  </div>`;
+}
+function bindWindowToggle() {
+  const el = $('#window-toggle');
+  if (!el) return;
+  el.addEventListener('click', async e => {
+    const btn = e.target.closest('button[data-window]');
+    if (!btn) return;
+    const w = Number(btn.dataset.window);
+    if (w === rateWindow) return;
+    rateWindow = w;
+    await stockPost('/api/stock/settings', {rate_window_days: w});
+    stockFor = null; partsFor = null;
+    render();
+  });
 }
 function note(title, text, link) {
   return `<section class="panel"><div class="body empty"><b>${esc(title)}</b>${text ? `<p>${text}</p>` : ''}${link ? `<p><a class="btn primary" href="#data">${esc(link)}</a></p>` : ''}</div></section>`;
@@ -432,7 +465,8 @@ function predPageHtml() {
   const sel = d.positions.find(p => p.key === selected) || shown[0] || null; selected = sel ? sel.key : null;
   const withRate = (cs.below_min || 0) + (cs.predicted || 0) + (cs.watch || 0) + (cs.ok || 0);
   return head(title, `Phase 2 · stock as of ${d.snapshot_as_of ? esc(d.snapshot_as_of) : 'undated snapshot'} · ${fmt(withRate)} positions with a demand rate · warns when hours to minimum ≤ lead time + ${fmt(fs.safety_hours)} h`) +
-    strip([[fmt(cs.predicted), 'Predicted, emailed', 'stock-predicted-count'], [fmt(cs.watch), `Watch within ${fmt(fs.watch_hours)} h`, 'stock-watch-count'], [fmt(cs.below_min), 'Already below minimum'], [fmt(cs.no_rate), 'No rate, not forecast']], 'compact') + noRateReasonsHtml(d) +
+    strip([[fmt(cs.predicted), 'Predicted, emailed', 'stock-predicted-count'], [fmt(cs.watch), `Watch within ${fmt(fs.watch_hours)} h`, 'stock-watch-count'], [fmt(cs.below_min), 'Already below minimum'], [fmt(cs.no_rate), 'No rate, not forecast']], 'compact') +
+    `<div style="display:flex;justify-content:flex-end;margin-bottom:var(--s2)">${windowToggle(rateWindow)}</div>` + noRateReasonsHtml(d) +
     `<div class="cols table-first"><section class="panel"><div class="tools prominent"><input id="pred-search" placeholder="Search material, description, supermarket or bin" value="${esc(predSearch)}" aria-label="Search predicted alerts"><select id="pred-filter" aria-label="Predicted alert filter"><option value="act">Predicted, Watch and below minimum</option><option value="rate">All with a demand rate</option><option value="norate">No demand rate</option><option value="all">All positions</option></select></div>
 <div class="tw"><table class="w2 pred"><thead><tr><th>Material<th>Location<th class="r">Available<th class="r">Min<th class="r">Demand / day<th>Hours to minimum<th>Tier</tr></thead><tbody id="pred-rows">${shown.map(p => {
       const [tc, tt] = tierOf(p), tick = p.lead_hours + fs.safety_hours;
@@ -442,6 +476,7 @@ function predPageHtml() {
 <div id="pred-detail">${detailHtml(sel, fs)}<section class="panel"><h2>Settings <a class="btn small" href="#settings">Edit</a></h2><div class="body"><dl class="kv"><dt>Lead time<dd>${fmt(fs.lead_hours_stocked, 1)} h stocked · ${fmt(fs.lead_hours_fab, 1)} h fab<dt>Safety buffer<dd>${fmt(fs.safety_hours, 1)} h<dt>Watch window<dd>${fmt(fs.watch_hours, 1)} h<dt>Weights<dd>history ${fmt(fs.weights.history, 1)} · schedule ${fmt(fs.weights.schedule, 1)} · observed ${fmt(fs.weights.observed, 1)}<dt>Divergence<dd>${fmt(fs.divergence_pct)}%</dl></div></section></div></div>`;
 }
 function bindPred() {
+  bindWindowToggle();
   if (!$('#pred-rows')) return;
   $('#pred-filter').value = predFilter;
   $('#pred-search').addEventListener('input', e => { predSearch = e.target.value; predPage = 0; render(); const s = $('#pred-search'); s.focus(); s.setSelectionRange(s.value.length, s.value.length); });
@@ -540,7 +575,7 @@ function insightsPageHtml() {
   if (partsData.error) return head(title, 'Unavailable') + note('Replenishment insights unavailable', esc(partsData.error));
 
   const d = partsData, sm = d.summary, th = d.thresholds;
-  const csvUrl = `/api/insights/parts.csv?dataset=${encodeURIComponent(ds)}&refill_pct=${th.refill_size_pct}&refills=${th.refills_30d}&divergence=${th.divergence_pct}&min_refills=${th.min_refills}`;
+  const csvUrl = `/api/insights/parts.csv?dataset=${encodeURIComponent(ds)}&refill_pct=${th.refill_size_pct}&refills=${th.refills_30d}&divergence=${th.divergence_pct}&min_refills=${th.min_refills}&window=${rateWindow}`;
   const headerActions = `<a class="btn" id="export-parts-csv" href="${csvUrl}" download="problem-parts.csv">Export CSV</a>`;
   const subtitle = `View 2 · ${d.window_days}-day replenishment window (${esc(d.window_start || '—')} to ${esc(d.window_end || '—')}) · data steward review`;
 
@@ -580,9 +615,9 @@ function insightsPageHtml() {
     flagLegendHtml(th, sm) +
     `<div class="cols"><section class="panel">
       <div class="tools" style="justify-content:space-between">
-        <div style="display:flex;gap:var(--s2);flex:1;min-width:240px">
+        <div style="display:flex;gap:var(--s2);flex:1;min-width:240px;align-items:center">
           <input id="insights-search" placeholder="Search material, description, supermarket or bin" value="${esc(partsSearch)}" aria-label="Search problem parts">
-
+          ${windowToggle(rateWindow)}
         </div>
         <div class="th-inputs">
           <label for="th-refill-pct">Refill %</label><input id="th-refill-pct" class="cell" type="number" min="0" max="100" step="5" value="${partsThresholds.refill_pct}" aria-label="Refill percentage threshold">
@@ -612,6 +647,7 @@ function insightsPageHtml() {
     <div id="part-detail">${partDetailHtml(sel)}</div></div>`;
 }
 function bindInsights() {
+  bindWindowToggle();
   if (!$('#parts-rows')) return;
   $('#insights-search')?.addEventListener('input', e => {
     partsSearch = e.target.value; partsPage = 0; render();

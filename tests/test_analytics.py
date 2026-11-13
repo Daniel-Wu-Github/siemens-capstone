@@ -4,6 +4,7 @@ import pytest
 
 from siemens_capstone.analytics import analyze
 from siemens_capstone.store import Store
+from qc_helpers import analysis, bin_row, transfer_row
 
 
 def records():
@@ -166,7 +167,7 @@ def test_missing_source_column_means_replenishment_and_no_references_is_safe():
     assert p['tolerance_flag'] == 'missing' and p['min'] is None and p['at_or_below_min'] is False and p['fill_pct'] is None
     assert p['bom_status'] == 'not_in_bom' and p['bom_qty_per_day'] is None
     assert p['snapshot_history'] == [] and p['observed_depletion_per_day'] is None
-    assert result['references']['tolerances']['matched_positions'] == 0 and result['horizon_default_hours'] == 8 and result['version'] == '2.1-refills1'
+    assert result['references']['tolerances']['matched_positions'] == 0 and result['horizon_default_hours'] == 8 and result['version'] == '2.2-window'
 
 
 def test_supermarket_names_and_unmapped_types():
@@ -221,3 +222,21 @@ def test_snapshot_history_and_observed_depletion_ignore_receipts():
     assert position(analyze(reference_records(), '1900', refs), 'PART-A')['observed_depletion_per_day'] == 0.0
     refs['snapshots'] = [snap('2026-10-01', 5)]
     assert position(analyze(reference_records(), '1900', refs), 'PART-A')['observed_depletion_per_day'] is None
+
+
+def test_window_days_override_60():
+    """A 60-day window uses events from the last 60 days."""
+    # Create transfers spanning 60 days
+    events = [transfer_row(i, 'SYNTH', 'B', 10, day) for i, day in enumerate(range(1, 61))]
+    result = analysis([bin_row('SYNTH', 'B', 80)], transfers=events, window_days_override=60)
+    inv = result['inventory'][0]
+    assert inv['window_days'] == 60
+    assert inv['window_transfer_events'] == 60
+
+
+def test_window_days_override_30_is_default():
+    events = [transfer_row(i, 'SYNTH', 'B', 10, day) for i, day in enumerate(range(1, 61))]
+    r30 = analysis([bin_row('SYNTH', 'B', 80)], transfers=events)
+    r30_explicit = analysis([bin_row('SYNTH', 'B', 80)], transfers=events, window_days_override=30)
+    assert r30['inventory'][0]['window_transfer_events'] == r30_explicit['inventory'][0]['window_transfer_events']
+

@@ -190,3 +190,20 @@ def test_lead_class_select_in_detail_posts_and_updates_the_forecast(tmp_path, cl
         expect(page.locator('#stock-predicted-count')).to_have_text('2')
         assert not errors
         browser.close()
+
+
+@pytest.mark.browser
+def test_rate_window_toggle_updates_setting_and_reloads(tmp_path, clean_env):
+    with running_server(tmp_path) as base, sync_playwright() as p:
+        browser, page, ds, errors = open_page(p, base, 'predicted')
+        toggle = page.locator('#window-toggle')
+        expect(toggle).to_be_visible()
+        btn60 = toggle.locator('button[data-window="60"]')
+        with page.expect_response('**/api/stock/settings') as info:
+            btn60.click()
+        assert info.value.status == 200
+        expect(btn60).to_have_attribute('aria-pressed', 'true')
+        saved = page.request.get(base + f'/api/stock?dataset={ds}').json()
+        assert saved['forecast']['settings']['rate_window_days'] == 60
+        assert not errors
+        browser.close()

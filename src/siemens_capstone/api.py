@@ -53,7 +53,14 @@ def handler_for(store):
                     query = parse_qs(url.query, keep_blank_values=True)
                     names = dict(refill_pct='refill_size_pct', refills='refills_30d', divergence='divergence_pct', min_refills='min_refills')
                     thresholds = {field: query[param][0] for param, field in names.items() if param in query}
-                    report = store.parts_insights(dataset, thresholds)
+                    window = query.get('window', [None])[0]
+                    if window is not None:
+                        try:
+                            window = int(window)
+                            if window not in (30, 45, 60): raise ValueError()
+                        except (ValueError, TypeError):
+                            return self.respond(400, {'error': 'window must be 30, 45 or 60.'})
+                    report = store.parts_insights(dataset, thresholds, window_days=window)
                     if url.path.endswith('.csv'):
                         return self.respond(200, insights_parts.to_csv(report).encode('utf-8'), 'text/csv; charset=utf-8',
                                             headers={'Content-Disposition': 'attachment; filename="problem-parts.csv"'})

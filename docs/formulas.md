@@ -18,6 +18,14 @@ Status: accepted 2026-10-29; matched in code. Values marked placeholder await Si
 - If `abs(schedule - history) / history x 100 > divergence`, history is dropped and `demand = schedule`. The default divergence is 1000%, which switches the override off in practice; set it to 50 to restore the earlier rule. The check is skipped when history is 0.
 - If only one input exists, use it. If none exists there is no forecast.
 
+### Rate window (unlocked 2026-11-13, decided by Daniel)
+
+The demand rate calculation uses a configurable window: 30, 45, or 60 days of transfer history.
+Default: 30 days. User-selectable via the segmented control on Predicted alerts and Replenishment insights.
+
+Backtest evidence: 60-day flat rate achieved MAE 3.15 vs 30-day's 4.02 (units/day) on a holdout test.
+A formal comparison across 30/45/60 windows is in `outputs/backtest_windows.md`.
+
 ## 2. Hours to minimum
 
 `hours_to_min = max(0, available - min) / demand x 24`

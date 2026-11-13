@@ -11,10 +11,13 @@ import os
 from .alerts import label, position_key
 
 DEFAULT_SETTINGS = dict(lead_hours_stocked=3.0, lead_hours_fab=3.0, safety_hours=24.0, watch_hours=72.0,
-                        weights=dict(history=2.0, schedule=1.0, observed=0.0), divergence_pct=1000.0)  # 2:1 history, override off: best backtest blend, decided 2026-11-04
-RANGES = dict(lead_hours_stocked=(0, 720), lead_hours_fab=(0, 720), safety_hours=(0, 168), watch_hours=(0, 720), divergence_pct=(0, 1000))
+                        weights=dict(history=2.0, schedule=1.0, observed=0.0), divergence_pct=1000.0,
+                        rate_window_days=30)  # 2:1 history, override off: best backtest blend, decided 2026-11-04
+RANGES = dict(lead_hours_stocked=(0, 720), lead_hours_fab=(0, 720), safety_hours=(0, 168), watch_hours=(0, 720), divergence_pct=(0, 1000),
+              rate_window_days=(30, 60))
 WEIGHT_RANGE = (0, 10)
-ENV = dict(LEAD_HOURS_STOCKED='lead_hours_stocked', LEAD_HOURS_FAB='lead_hours_fab', ALERT_SAFETY_HOURS='safety_hours', ALERT_WATCH_HOURS='watch_hours')
+ENV = dict(LEAD_HOURS_STOCKED='lead_hours_stocked', LEAD_HOURS_FAB='lead_hours_fab', ALERT_SAFETY_HOURS='safety_hours', ALERT_WATCH_HOURS='watch_hours',
+           RATE_WINDOW_DAYS='rate_window_days')
 NAMES = ('history', 'schedule', 'observed')
 
 
@@ -35,7 +38,18 @@ def default_settings(env=None):
     for var, key in ENV.items():
         raw = env.get(var)
         if raw is None or str(raw).strip() == '': continue
-        out[key] = _num(raw, var, *RANGES[key])
+        if key == 'rate_window_days':
+            if isinstance(raw, bool) or raw is None:
+                raise ValueError(f'{var} must be a number.')
+            try:
+                v = int(raw) if float(raw).is_integer() else None
+            except (TypeError, ValueError):
+                raise ValueError(f'{var} must be a number.') from None
+            if v not in (30, 45, 60):
+                raise ValueError('rate_window_days must be 30, 45 or 60.')
+            out[key] = v
+        else:
+            out[key] = _num(raw, var, *RANGES[key])
     return out
 
 
@@ -48,6 +62,16 @@ def validate_settings(current, changes):
             for name, w in value.items():
                 if name not in NAMES: raise ValueError(f'Unknown weight: {name}.')
                 out['weights'][name] = _num(w, f'{name} weight', *WEIGHT_RANGE)
+        elif key == 'rate_window_days':
+            if isinstance(value, bool) or value is None:
+                raise ValueError('rate_window_days must be a number.')
+            try:
+                v = int(value) if float(value).is_integer() else None
+            except (TypeError, ValueError):
+                raise ValueError('rate_window_days must be a number.') from None
+            if v not in (30, 45, 60):
+                raise ValueError('rate_window_days must be 30, 45 or 60.')
+            out[key] = v
         elif key in RANGES: out[key] = _num(value, key, *RANGES[key])
         else: raise ValueError(f'Unknown setting: {key}.')
     return out

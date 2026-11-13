@@ -12,7 +12,7 @@ from statistics import median
 
 from .ingest import excel_datetime, identifier
 
-ANALYSIS_VERSION = '2.1-refills1'
+ANALYSIS_VERSION = '2.2-window'
 
 
 def numeric(value):
@@ -147,7 +147,7 @@ def production_orders(rows, date_system='1900'):
     return order_info
 
 
-def analyze(records, date_system='1900', references=None):
+def analyze(records, date_system='1900', references=None, window_days_override=None):
     references = references or {}
     tolerances, bom_rows = references.get('tolerances'), references.get('bom')
     snapshots = {s['as_of']: s['rows'] for s in sorted(references.get('snapshots') or [], key=lambda s: s['as_of'])}
@@ -187,7 +187,8 @@ def analyze(records, date_system='1900', references=None):
     replen_dates = [r['confirmed'] for r in replen]
     latest = max(replen_dates).date() if replen_dates else None
     earliest = min(replen_dates).date() if replen_dates else None
-    window_days = min(30, (latest-earliest).days+1) if latest else 0
+    max_window = window_days_override or 30
+    window_days = min(max_window, (latest-earliest).days+1) if latest else 0
     cutoff = latest - timedelta(days=window_days-1) if latest else None
     lookup = defaultdict(list)
     for p in positions.values(): lookup[(p['material'], p['bin'])].append(p)

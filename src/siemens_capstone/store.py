@@ -158,19 +158,20 @@ class Store:
         with self.connection() as db:
             return db.execute('SELECT COUNT(*) FROM records WHERE dataset=?', (dataset_id,)).fetchone()[0]
 
-    def _insights(self, db, dataset_id, cache=True):
+    def _insights(self, db, dataset_id, cache=True, window_days_override=None):
         """Cached workbook analysis on an open connection (no scenarios attached)."""
         dataset, quality = self._dataset(db, dataset_id)
         if dataset['kind'] != 'workbook': raise ValueError('Select an imported workbook to view source analytics.')
+        cache_key = f"{ANALYSIS_VERSION}-w{window_days_override or 30}"
         cached = db.execute('SELECT * FROM analysis_cache WHERE dataset=?', (dataset_id,)).fetchone()
-        if cached and cached['version'] == ANALYSIS_VERSION: return json.loads(cached['payload'])
+        if cached and cached['version'] == cache_key: return json.loads(cached['payload'])
         records = {}
         for row in db.execute('SELECT sheet,payload FROM records WHERE dataset=? ORDER BY sheet,row_number', (dataset_id,)):
             records.setdefault(row['sheet'], []).append(json.loads(row['payload']))
-        result = analyze(records, quality.get('date_system', '1900'), self._references(db, dataset_id))
+        result = analyze(records, quality.get('date_system', '1900'), self._references(db, dataset_id), window_days_override=window_days_override)
         result.update(dataset_id=dataset_id, source_checksum=dataset['checksum'], created_at=now())
         if cache:
-            db.execute('INSERT OR REPLACE INTO analysis_cache VALUES(?,?,?)', (dataset_id, ANALYSIS_VERSION, encoded(result)))
+            db.execute('INSERT OR REPLACE INTO analysis_cache VALUES(?,?,?)', (dataset_id, cache_key, encoded(result)))
             self._event(db, dataset_id, 'Workbook analytics saved: stock snapshot, transfer cadence, production events, and planned lines.')
         return result
 
@@ -178,12 +179,14 @@ class Store:
         with self.connection() as db:
             return self._insights(db, dataset_id)
 
-    def parts_insights(self, dataset_id, thresholds=None):
+    def parts_insights(self, dataset_id, thresholds=None, window_days=None):
         from . import insights_parts
         thresholds = insights_parts.validate_thresholds(thresholds)
         with self.connection() as db:
+            settings = self._settings(db, dataset_id)
+            effective_window = window_days or settings.get('rate_window_days', 30)
             items = self._stock_positions(db, dataset_id)[0]
-            insights = self._insights(db, dataset_id)
+            insights = self._insights(db, dataset_id, window_days_override=effective_window if effective_window != 30 else None)
             report = insights_parts.parts_report(items, insights['inventory'], thresholds)
             window = insights['transfers']
         return dict(report, dataset_id=dataset_id, window_days=window['window_days'],
@@ -202,8 +205,12 @@ class Store:
         overrides = {r['position']: r['available'] for r in db.execute('SELECT position,available FROM stock_overrides WHERE dataset=?', (dataset_id,))}
         items = stock_alerts.evaluate(stock_alerts.positions(rows, refs['tolerances'], overrides), self.alert_config['rule'])
         lead_classes = {r['position']: r['lead_class'] for r in db.execute('SELECT position,lead_class FROM stock_lead_classes WHERE dataset=?', (dataset_id,))}
-        if inventory is None: inventory = self._insights(db, dataset_id)['inventory']
-        proactive.project(items, inventory, self._settings(db, dataset_id) if settings is None else settings, lead_classes)
+        if settings is None:
+            settings = self._settings(db, dataset_id)
+        window = settings.get('rate_window_days', 30)
+        if inventory is None:
+            inventory = self._insights(db, dataset_id, window_days_override=window if window != 30 else None)['inventory']
+        proactive.project(items, inventory, settings, lead_classes)
         return items, as_of, refs['tolerances'] is not None
 
     def _settings(self, db, dataset_id):
@@ -368,10 +375,12 @@ class Store:
             self._dataset(db, dataset_id)
             current = self._settings(db, dataset_id)
             candidate = proactive.validate_settings(current, changes)
-            # One analysis for both projections; on a cold cache it is computed but not saved.
-            inventory = self._insights(db, dataset_id, cache=False)['inventory']
-            before = self._stock_positions(db, dataset_id, settings=current, inventory=inventory)[0]
-            after = self._stock_positions(db, dataset_id, settings=candidate, inventory=inventory)[0]
+            cur_w = current.get('rate_window_days', 30)
+            cand_w = candidate.get('rate_window_days', 30)
+            inv_before = self._insights(db, dataset_id, cache=False, window_days_override=cur_w if cur_w != 30 else None)['inventory']
+            inv_after = inv_before if cand_w == cur_w else self._insights(db, dataset_id, cache=False, window_days_override=cand_w if cand_w != 30 else None)['inventory']
+            before = self._stock_positions(db, dataset_id, settings=current, inventory=inv_before)[0]
+            after = self._stock_positions(db, dataset_id, settings=candidate, inventory=inv_after)[0]
         def summary(items):
             counts = dict(predicted=0, watch=0, below_min=0, no_rate=0, ok=0)
             for p in items:
