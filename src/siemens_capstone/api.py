@@ -41,7 +41,8 @@ def handler_for(store):
         def do_GET(self):
             if not self.valid_host(): return self.respond(403, {'error': 'Use the local server address.'})
             url = urlsplit(self.path)
-            dataset = parse_qs(url.query).get('dataset', [''])[0]
+            query = parse_qs(url.query, keep_blank_values=True)
+            dataset = query.get('dataset', [''])[0]
             try:
                 if url.path in ('/', '/index.html'):
                     return self.respond(200, HTML.read_bytes(), 'text/html; charset=utf-8')
@@ -50,7 +51,6 @@ def handler_for(store):
                 if url.path == '/api/sources': return self.respond(200, store.sources(dataset))
                 if url.path == '/api/insights': return self.respond(200, store.insights(dataset))
                 if url.path in ('/api/insights/parts', '/api/insights/parts.csv'):
-                    query = parse_qs(url.query, keep_blank_values=True)
                     names = dict(refill_pct='refill_size_pct', refills='refills_30d', divergence='divergence_pct', min_refills='min_refills')
                     thresholds = {field: query[param][0] for param, field in names.items() if param in query}
                     window = query.get('window', [None])[0]
@@ -65,7 +65,15 @@ def handler_for(store):
                         return self.respond(200, insights_parts.to_csv(report).encode('utf-8'), 'text/csv; charset=utf-8',
                                             headers={'Content-Disposition': 'attachment; filename="problem-parts.csv"'})
                     return self.respond(200, report)
-                if url.path == '/api/stock': return self.respond(200, store.stock_view(dataset))
+                if url.path == '/api/stock':
+                    window = query.get('window', [None])[0]
+                    if window is not None:
+                        try:
+                            window = int(window)
+                            if window not in (30, 45, 60): raise ValueError()
+                        except (ValueError, TypeError):
+                            return self.respond(400, {'error': 'window must be 30, 45 or 60.'})
+                    return self.respond(200, store.stock_view(dataset, window=window))
                 if url.path == '/api/stock/presets': return self.respond(200, store.list_presets(dataset))
                 if url.path == '/api/feedback': return self.respond(200, store.list_feedback())
                 return self.respond(404, {'error': 'Not found.'})

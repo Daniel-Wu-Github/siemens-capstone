@@ -286,13 +286,14 @@ class Store:
             self._event(db, dataset_id, f"Stock alert notification: {record['subject']} ({', '.join(r['channel'] + ' ' + r['status'] for r in record['results'])}).")
         return record
 
-    def stock_view(self, dataset_id):
+    def stock_view(self, dataset_id, window=None):
         """Read-only: opening or reloading the page never changes alerts or sends anything. Alerts sync on imports, edits, settings changes and checks."""
         with self.connection() as db:
-            items, as_of, has_tol = self._stock_positions(db, dataset_id)
+            saved = self._settings(db, dataset_id)
+            settings = dict(saved, rate_window_days=int(window)) if window is not None else saved
+            items, as_of, has_tol = self._stock_positions(db, dataset_id, settings=settings)
             open_alerts = self._open_stock_alerts(db, dataset_id)
             notes = [json.loads(r['payload']) for r in db.execute('SELECT payload FROM notifications WHERE dataset=? ORDER BY rowid DESC LIMIT 5', (dataset_id,))]
-            settings = self._settings(db, dataset_id)
         counts = dict(predicted=0, watch=0, below_min=0, no_rate=0, ok=0)
         for p in items:
             key = {'within_lead': 'predicted'}.get(p['forecast'], p['forecast'])
@@ -301,7 +302,7 @@ class Store:
                     summary=dict(positions=len(items), alerts=sum(p['status'] == 'Alert' for p in items),
                                  ok=sum(p['status'] == 'OK' for p in items), no_tolerance=sum(p['status'] == 'No tolerance' for p in items),
                                  overridden=sum(p['overridden'] for p in items)),
-                    forecast=dict(settings=settings, summary=counts),
+                    forecast=dict(settings=settings, summary=counts, saved_rate_window_days=saved.get('rate_window_days', 30)),
                     open_alerts=open_alerts, notifications=notes, channels=stock_alerts.public_config(self.alert_config), notification=None)
 
     def set_available(self, dataset_id, position, available):

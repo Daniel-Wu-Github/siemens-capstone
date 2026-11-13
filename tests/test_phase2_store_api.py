@@ -497,3 +497,33 @@ def test_insights_parts_window_query_param_validation_and_passthrough(tmp_path):
         status, body = call(base, f'/api/insights/parts?dataset={ds}&window=invalid')
         assert status == 400 and 'window must be 30, 45 or 60.' in body['error']
 
+
+def test_stock_view_window_preview_does_not_mutate_settings(ready):
+    store, ds, _ = ready
+    assert store.stock_settings(ds)['rate_window_days'] == 30
+    preview = store.stock_view(ds, window=60)
+    assert preview['forecast']['settings']['rate_window_days'] == 60
+    assert preview['forecast']['saved_rate_window_days'] == 30
+    # SQLite setting is unchanged
+    assert store.stock_settings(ds)['rate_window_days'] == 30
+
+
+def test_stock_api_window_query_param_validation_and_preview(tmp_path):
+    store, ds = build(tmp_path)
+    with serving(store) as base:
+        status, body = call(base, f'/api/stock?dataset={ds}&window=60')
+        assert status == 200 and body['forecast']['settings']['rate_window_days'] == 60
+        assert body['forecast']['saved_rate_window_days'] == 30
+
+        # Verify DB is unchanged
+        status_unparam, body_unparam = call(base, f'/api/stock?dataset={ds}')
+        assert status_unparam == 200 and body_unparam['forecast']['settings']['rate_window_days'] == 30
+
+        # Invalid window values
+        status_bad, body_bad = call(base, f'/api/stock?dataset={ds}&window=20')
+        assert status_bad == 400 and 'window must be 30, 45 or 60.' in body_bad['error']
+
+        status_inv, body_inv = call(base, f'/api/stock?dataset={ds}&window=not-a-number')
+        assert status_inv == 400 and 'window must be 30, 45 or 60.' in body_inv['error']
+
+

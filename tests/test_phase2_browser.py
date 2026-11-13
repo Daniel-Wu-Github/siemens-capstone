@@ -247,11 +247,25 @@ def test_rate_window_toggle_updates_setting_and_reloads(tmp_path, clean_env):
         toggle = page.locator('#window-toggle')
         expect(toggle).to_be_visible()
         btn60 = toggle.locator('button[data-window="60"]')
-        with page.expect_response('**/api/stock/settings') as info:
+
+        # Changing window toggle does NOT save settings or send emails; it only previews.
+        with page.expect_response(lambda r: '/api/stock?' in r.url and 'window=60' in r.url) as info:
             btn60.click()
         assert info.value.status == 200
         expect(btn60).to_have_attribute('aria-pressed', 'true')
+
+        # Setting in DB is NOT changed yet
         saved = page.request.get(base + f'/api/stock?dataset={ds}').json()
-        assert saved['forecast']['settings']['rate_window_days'] == 60
+        assert saved['forecast']['settings']['rate_window_days'] == 30
+
+        # Settings are saved and emails sent only when clicking "Save window and send emails"
+        save_btn = page.locator('#save-window-btn')
+        expect(save_btn).to_be_visible()
+        with page.expect_response('**/api/stock/settings') as info:
+            save_btn.click()
+        assert info.value.status == 200
+        saved_after = page.request.get(base + f'/api/stock?dataset={ds}').json()
+        assert saved_after['forecast']['settings']['rate_window_days'] == 60
+
         assert not errors
         browser.close()

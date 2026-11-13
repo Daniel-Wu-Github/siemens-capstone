@@ -206,10 +206,11 @@ async function loadDatasets() {
   datasets = await api('/api/datasets');
   ds = datasets.length ? datasets[datasets.length - 1].id : null;
 }
-async function loadStock() {
+async function loadStock(previewWindow) {
   const requested = ds;
   try {
-    const d = await api('/api/stock?dataset=' + encodeURIComponent(requested));
+    const url = '/api/stock?dataset=' + encodeURIComponent(requested) + (previewWindow ? '&window=' + encodeURIComponent(previewWindow) : '');
+    const d = await api(url);
     if (requested !== ds) return;
     stock = d;
     if (stock && stock.forecast && stock.forecast.settings && stock.forecast.settings.rate_window_days) {
@@ -303,9 +304,13 @@ function bindWindowToggle() {
     const w = Number(btn.dataset.window);
     if (w === rateWindow) return;
     rateWindow = w;
-    await stockPost('/api/stock/settings', {rate_window_days: w});
-    stockFor = null; partsFor = null;
-    render();
+    if (view === 'predicted') {
+      await loadStock(w);
+    } else if (view === 'insights') {
+      await loadPartsInsights();
+    } else {
+      render();
+    }
   });
 }
 function note(title, text, link) {
@@ -467,7 +472,7 @@ function calcStepsHtml(p, fs) {
   if (p.hours_to_min != null && p.demand_per_day) steps.push(['Hours to minimum', `max(0, ${fmt(p.available)} − ${fmt(p.min)}) / ${fmt(p.demand_per_day, 2)} × 24 = ${fmtHours(p.hours_to_min)}`]);
   steps.push(['Alert threshold', `lead ${fmt(p.lead_hours, 1)} h + safety ${fmt(fs.safety_hours, 1)} h = ${fmt(tick, 1)} h`]);
   steps.push(['Suggested quantity', p.suggested_qty == null ? '—' : fmt(p.suggested_qty)]);
-  return `<section class="panel pred-calc-card"><h2>How it was calculated <a class="btn small" href="#settings">Edit</a></h2><div class="body">${steps.map(([a, b]) => `<div class="step"><span>${esc(a)}</span><span class="num">${esc(b)}</span></div>`).join('')}</div></section>`;
+  return `<section class="panel pred-calc-card"><h2>How it was calculated <a class="btn small" href="#settings">Edit</a></h2><div class="body">${steps.map(([a, b]) => `<div class="step"><span>${esc(a)}</span><span class="num">${esc(b)}</span></div>`).join('')}<div style="margin-top:auto;padding-top:var(--s3);display:flex;justify-content:flex-end"><button type="button" class="btn primary small" id="save-window-btn">Save window and send emails</button></div></div></section>`;
 }
 function detailHtml(p, fs) {
   return calcStepsHtml(p, fs);
@@ -492,22 +497,20 @@ function predPageHtml() {
 
   const chartHtml = sel
     ? `<div id="pred-detail">
-        <section class="panel pred-chart-card">
+        <section class="panel pred-chart-card" id="pred-chart">
           <h2><span>${esc(sel.description || sel.material)}</span> <small class="why" style="font-weight:400">${esc(sel.material)} · ${esc(sel.supermarket)} · ${esc(sel.storage_type)} / ${esc(sel.bin)}</small></h2>
-          <div class="body">
-            <div id="pred-chart">
-              ${sel.hours_to_min != null && sel.demand_per_day
-                ? projection(sel, sel.lead_hours + fs.safety_hours, fs.watch_hours, true)
-                : `<div class="note" style="padding:var(--s4)">No projection: ${esc(sel.description || sel.material)} has no demand rate or is already at its minimum.</div>`}
-              <div class="pred-info">
-                <dl class="kv" style="display:flex;flex-wrap:wrap;gap:var(--s2) var(--s4);margin:0;width:100%">
-                  <div><dt>Tier</dt><dd>${tierOf(sel)[1]}</dd></div>
-                  <div><dt>Hours to min</dt><dd>${fmtHours(sel.hours_to_min)}</dd></div>
-                  <div><dt>Demand / day</dt><dd>${sel.demand_per_day == null ? '—' : fmt(sel.demand_per_day, 2)}</dd></div>
-                  <div><dt>Suggested qty</dt><dd>${sel.suggested_qty == null ? '—' : fmt(sel.suggested_qty)}</dd></div>
-                  <div><dt>Lead class</dt><dd><select class="cell" data-lead-pos="${esc(sel.key)}" aria-label="Lead class for ${esc(sel.material)} ${esc(sel.bin)}"><option value="stocked"${sel.lead_class === 'stocked' ? ' selected' : ''}>stocked</option><option value="fab"${sel.lead_class === 'fab' ? ' selected' : ''}>fab</option></select></dd></div>
-                </dl>
-              </div>
+          <div class="body pred-chart">
+            ${sel.hours_to_min != null && sel.demand_per_day
+              ? projection(sel, sel.lead_hours + fs.safety_hours, fs.watch_hours, true)
+              : `<div class="note" style="padding:var(--s4)">No projection: ${esc(sel.description || sel.material)} has no demand rate or is already at its minimum.</div>`}
+            <div class="pred-info">
+              <dl class="kv" style="display:flex;flex-wrap:wrap;gap:var(--s2) var(--s4);margin:0;width:100%">
+                <div><dt>Tier</dt><dd>${tierOf(sel)[1]}</dd></div>
+                <div><dt>Hours to min</dt><dd>${fmtHours(sel.hours_to_min)}</dd></div>
+                <div><dt>Demand / day</dt><dd>${sel.demand_per_day == null ? '—' : fmt(sel.demand_per_day, 2)}</dd></div>
+                <div><dt>Suggested qty</dt><dd>${sel.suggested_qty == null ? '—' : fmt(sel.suggested_qty)}</dd></div>
+                <div><dt>Lead class</dt><dd><select class="cell" data-lead-pos="${esc(sel.key)}" aria-label="Lead class for ${esc(sel.material)} ${esc(sel.bin)}"><option value="stocked"${sel.lead_class === 'stocked' ? ' selected' : ''}>stocked</option><option value="fab"${sel.lead_class === 'fab' ? ' selected' : ''}>fab</option></select></dd></div>
+              </dl>
             </div>
           </div>
         </section>
@@ -528,6 +531,9 @@ function predPageHtml() {
 }
 function bindPred() {
   bindWindowToggle();
+  $('#save-window-btn')?.addEventListener('click', async () => {
+    await stockPost('/api/stock/settings', {rate_window_days: rateWindow});
+  });
   if (!$('#pred-rows')) return;
   $('#pred-filter').value = predFilter;
   $('#pred-search').addEventListener('input', e => { predSearch = e.target.value; predPage = 0; render(); const s = $('#pred-search'); s.focus(); s.setSelectionRange(s.value.length, s.value.length); });

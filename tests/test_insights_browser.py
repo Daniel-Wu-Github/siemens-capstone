@@ -92,10 +92,13 @@ def test_insights_rate_window_toggle(tmp_path, clean_env):
         toggle = page.locator('#window-toggle')
         expect(toggle).to_be_visible()
         btn45 = toggle.locator('button[data-window="45"]')
-        with page.expect_response('**/api/stock/settings') as info:
+        with page.expect_response(lambda r: '/api/insights/parts?' in r.url and 'window=45' in r.url) as info:
             btn45.click()
         assert info.value.status == 200
         expect(btn45).to_have_attribute('aria-pressed', 'true')
+        # Setting in stock DB is unchanged
+        saved = page.request.get(base + f'/api/stock?dataset={ds}').json()
+        assert saved['forecast']['settings']['rate_window_days'] == 30
         assert not errors
         browser.close()
 
