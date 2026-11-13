@@ -5,7 +5,7 @@
 'use strict';
 const DATA = /*__DEMO_DATA__*/null;
 const NAMES = ['history', 'schedule', 'observed'];
-const RANGES = {lead_hours_stocked: [0, 720], lead_hours_fab: [0, 720], safety_hours: [0, 168], watch_hours: [0, 720], divergence_pct: [0, 1000]};
+const RANGES = {lead_hours_stocked: [0, 720], lead_hours_fab: [0, 720], safety_hours: [0, 168], watch_hours: [0, 720], divergence_pct: [0, 1000], rate_window_days: [30, 60]};
 const WEIGHT_RANGE = [0, 10];
 const THRESHOLD_RANGES = {refill_size_pct: [0, 100], refills_30d: [0, 100], divergence_pct: [0, 1000], min_refills: [1, 100]};
 const DEFAULT_THRESHOLDS = {refill_size_pct: 50, refills_30d: 8, divergence_pct: 50, min_refills: 3};
@@ -32,6 +32,10 @@ function validateSettings(current, changes) {
         if (!NAMES.includes(name)) throw bad(`Unknown weight: ${name}.`);
         out.weights[name] = num(w, `${name} weight`, ...WEIGHT_RANGE);
       }
+    } else if (key === 'rate_window_days') {
+      const v = num(value, key, 30, 60);
+      if (![30, 45, 60].includes(v)) throw bad('rate_window_days must be 30, 45 or 60.');
+      out[key] = v;
     } else if (key in RANGES) out[key] = num(value, key, ...RANGES[key]);
     else throw bad(`Unknown setting: ${key}.`);
   }
@@ -98,9 +102,9 @@ function project(items, settings, leadClasses) {
 /* ---- state ---- */
 const base = clone(DATA.stock.positions);
 const DEFAULT_SETTINGS = clone(DATA.stock.forecast.settings);
-let settings, overrides, leadClasses, alerts, notifications, activity, presets, seq;
+let settings, overrides, leadClasses, alerts, notifications, activity, presets, feedbacks, seq;
 function reset() {
-  settings = clone(DEFAULT_SETTINGS); overrides = {}; leadClasses = {}; alerts = []; notifications = []; presets = clone(DATA.presets); seq = 0;
+  settings = clone(DEFAULT_SETTINGS); overrides = {}; leadClasses = {}; alerts = []; notifications = []; presets = clone(DATA.presets); feedbacks = []; seq = 0;
   activity = clone(DATA.sources.activity);
   const t = nowIso(); sync(positions());  // the starting workspace already has its alerts open
   for (const a of alerts) a.created_at = t;
@@ -166,17 +170,18 @@ function notify(created, resolved, digest) {
 const announce = ch => ch && (ch.created.length || ch.resolved.length) ? notify(ch.created, ch.resolved) : null;
 
 /* ---- views ---- */
-function stockView() {
-  const items = positions(), counts = {predicted: 0, watch: 0, below_min: 0, no_rate: 0, ok: 0};
+function stockView(windowOverride) {
+  const s = windowOverride != null ? {...settings, rate_window_days: windowOverride} : settings;
+  const items = positions(s), counts = {predicted: 0, watch: 0, below_min: 0, no_rate: 0, ok: 0};
   for (const p of items) { const k = p.forecast === 'within_lead' ? 'predicted' : p.forecast; if (k in counts) counts[k]++; }
   return {dataset_id: DATA.dataset_id, snapshot_as_of: null, tolerances_loaded: true, positions: items,
     summary: {positions: items.length, alerts: items.filter(p => p.status === 'Alert').length, ok: items.filter(p => p.status === 'OK').length,
       no_tolerance: items.filter(p => p.status === 'No tolerance').length, overridden: items.filter(p => p.overridden).length},
-    forecast: {settings: clone(settings), summary: counts}, open_alerts: openAlerts(), notifications: clone(notifications),
+    forecast: {settings: clone(s), summary: counts, saved_rate_window_days: settings.rate_window_days || 30}, open_alerts: openAlerts(), notifications: clone(notifications),
     channels: clone(DATA.stock.channels), notification: null};
 }
 function median(a) { const s = [...a].sort((x, y) => x - y), m = s.length >> 1; return s.length % 2 ? s[m] : (s[m - 1] + s[m]) / 2; }
-function partsReport(th) {
+function partsReport(th, win) {
   const parts = clone(DATA.parts.parts).map(p => {
     const pcts = p.refills.map(r => r.pct_of_max).filter(v => v !== null), flags = [];
     if (p.median_refill_pct !== null && pcts.length >= th.min_refills && p.median_refill_pct < th.refill_size_pct) flags.push('short_refills');
@@ -189,7 +194,7 @@ function partsReport(th) {
   const summary = {...DATA.parts.summary, flagged: parts.filter(p => p.flags.length).length};
   for (const f of ['short_refills', 'frequent_refills', 'divergent', 'slow_refill', 'no_refill']) summary[f] = parts.filter(p => p.flags.includes(f)).length;
   return {thresholds: th, summary, notes: clone(DATA.parts.notes), parts, dataset_id: DATA.dataset_id,
-    window_days: DATA.parts.window_days, window_start: DATA.parts.window_start, window_end: DATA.parts.window_end};
+    window_days: win || DATA.parts.window_days, window_start: DATA.parts.window_start, window_end: DATA.parts.window_end};
 }
 const CSV_FIELDS = ['key', 'material', 'description', 'supermarket', 'storage_type', 'bin', 'min', 'max', 'refills_30d', 'median_refill_pct', 'share_refills_95',
   'history_per_day', 'schedule_per_day', 'divergence_pct', 'days_under_min', 'days_under_min_status', 'flags'];
@@ -199,9 +204,15 @@ function csvCell(v) {
   if (typeof v === 'string' && /^[=+\-@\t\r]/.test(s)) s = "'" + s;
   return /[",\n\r]/.test(s) ? '"' + s.replace(/"/g, '""') + '"' : s;
 }
-function partsCsv(th) {
-  const rep = partsReport(th);
+function partsCsv(th, win) {
+  const rep = partsReport(th, win);
   return CSV_FIELDS.join(',') + '\r\n' + rep.parts.map(p => CSV_FIELDS.map(k => csvCell(p[k])).join(',')).join('\r\n') + '\r\n';
+}
+function windowFrom(q) {
+  if (!q.has('window')) return DATA.parts.window_days;
+  const w = Number(q.get('window'));
+  if (![30, 45, 60].includes(w)) throw bad('window must be 30, 45 or 60.');
+  return w;
 }
 function thresholdsFrom(q) {
   const map = {refill_pct: 'refill_size_pct', refills: 'refills_30d', divergence: 'divergence_pct', min_refills: 'min_refills'}, ch = {};
@@ -232,10 +243,19 @@ function handleGet(url) {
     case '/api/health': return {status: 'ok', storage: 'memory', mode: 'demo'};
     case '/api/datasets': return clone(DATA.datasets);
     case '/api/sources': { const s = clone(DATA.sources); s.activity = clone(activity); return s; }
-    case '/api/stock': return stockView();
+    case '/api/stock': {
+      const w = q.get('window');
+      if (w != null) {
+        const wn = Number(w);
+        if (![30, 45, 60].includes(wn)) throw bad('window must be 30, 45 or 60.');
+        return stockView(wn);
+      }
+      return stockView();
+    }
     case '/api/stock/presets': return clone(presets).sort((a, b) => a.name < b.name ? -1 : 1);
-    case '/api/insights/parts': return partsReport(thresholdsFrom(q));
-    case '/api/insights/parts.csv': return {csv: partsCsv(thresholdsFrom(q))};
+    case '/api/insights/parts': return partsReport(thresholdsFrom(q), windowFrom(q));
+    case '/api/insights/parts.csv': return {csv: partsCsv(thresholdsFrom(q), windowFrom(q))};
+    case '/api/feedback': return clone(feedbacks);
     default: throw new HttpError(404, 'Not found.');
   }
 }
@@ -292,6 +312,15 @@ function handlePost(url, body) {
       a.status = 'Acknowledged'; a.acknowledged_at = nowIso(); event(`Stock alert acknowledged for ${a.material} / ${a.bin}.`);
       return {ok: true};
     }
+    case '/api/feedback': {
+      const message = (b.message || '').trim();
+      if (!message || message.length > 2000) throw bad('Message must be 1–2000 characters.');
+      const name = (b.name || '').trim().slice(0, 100);
+      const page = (b.page || '').trim().slice(0, 50);
+      const record = {id: 'demo-fb-' + Date.now(), name: name || null, page: page || null, message, created_at: nowIso()};
+      feedbacks.unshift(record);
+      return {id: record.id, created_at: record.created_at};
+    }
     default: throw new HttpError(404, 'Not found.');
   }
 }
@@ -312,5 +341,5 @@ window.fetch = async function (input, init) {
     return respond(500, {error: 'The demo hit an unexpected error: ' + e.message});
   }
 };
-window.DEMO = {reset, csv: q => partsCsv(thresholdsFrom(new URLSearchParams(q))), state: () => ({overrides: clone(overrides), settings: clone(settings)})};
+window.DEMO = {reset, csv: q => partsCsv(thresholdsFrom(new URLSearchParams(q))), state: () => ({overrides: clone(overrides), settings: clone(settings), feedbacks: clone(feedbacks)})};
 })();

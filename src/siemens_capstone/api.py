@@ -73,7 +73,9 @@ def handler_for(store):
                             if window not in (30, 45, 60): raise ValueError()
                         except (ValueError, TypeError):
                             return self.respond(400, {'error': 'window must be 30, 45 or 60.'})
-                    return self.respond(200, store.stock_view(dataset, window=window))
+                    if window is not None:
+                        return self.respond(200, store.stock_view(dataset, window=window))
+                    return self.respond(200, store.stock_view(dataset))
                 if url.path == '/api/stock/presets': return self.respond(200, store.list_presets(dataset))
                 if url.path == '/api/feedback': return self.respond(200, store.list_feedback())
                 return self.respond(404, {'error': 'Not found.'})

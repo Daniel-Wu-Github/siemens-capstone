@@ -26,7 +26,7 @@ function guidePageHtml() {
 ${tag('predicted', 'Predicted')} It will reach its Min within about ${fmt(g.predictWindow)} hours (refill time plus a safety buffer).
 ${tag('watch', 'Watch')} It will reach its Min within ${fmt(g.watchHours)} hours. Keep an eye on it.
 ${tag('none', 'No rate')} We cannot tell how fast it is used, so we do not forecast it.</div>
-<p class="note">Use the menu on the left to move between pages. Come back to this guide any time with <b>Testing guide</b> at the bottom of the menu.</p>
+<p class="note">Use the menu on the left to move between pages. Click <b>✎ Give feedback</b> at the bottom of the menu to leave suggestions or report issues. Come back to this guide any time with <b>Testing guide</b>.</p>
 <p><button class="btn" type="button" data-demo-reset>Reset the demo data</button> <span class="note">Puts every change back (same as refreshing the page).</span></p>
 </div></section>`;
 
@@ -64,7 +64,8 @@ ${tag('none', 'No rate')} We cannot tell how fast it is used, so we do not forec
     [`Click ${b('Predicted alerts')}. The numbers at the top count ${tag('predicted', 'Predicted')}, ${tag('watch', 'Watch')} and bins already below Min.`,
      `Type ${b(g.predictedPart.material)} in the search box and click its row <span class="mk">3</span>. The right side shows a chart and a box called ${b('How it was calculated')} <span class="mk">4</span>.`,
      `Read the steps from top to bottom: history per day, schedule per day, demand per day, hours to the Min.`,
-     `At the bottom of that box, change ${b('Lead class')} <span class="mk">5</span> from <i>stocked</i> to <i>fab</i> and back. (Fab parts are made in the factory, so they can take longer.)`],
+     `At the bottom of that box, change ${b('Lead class')} <span class="mk">5</span> from <i>stocked</i> to <i>fab</i> and back. (Fab parts are made in the factory, so they can take longer.)`,
+     `Try the rate window buttons (${b('30 d')}, ${b('45 d')}, ${b('60 d')}) at the top right to preview projections over different lookback periods. Clicking ${b('Save window and send emails')} saves the chosen window.`],
     `A short line chart goes down toward the Min. The steps show the numbers behind the answer. Row <b>${esc(g.predictedPart.material)}</b> is expected to reach its Min in about ${b(fmt(g.predictedPart.hours_to_min, 1) + ' hours')}.`,
     `a number does not make sense, a word is unclear, or the chart does not help you.`,
     shot('predicted', 'Predicted alerts: 1 counts, 2 filter, 3 pick a row, 4 how it was calculated, 5 lead class.'));
@@ -82,6 +83,7 @@ ${tag('none', 'No rate')} We cannot tell how fast it is used, so we do not forec
     'Use the flags to spot parts that are refilled too often, in small amounts, or against the plan.',
     [`Click ${b('Replenishment insights')}.`,
      `Read the box ${b('What the flags mean')} <span class="mk">2</span>. Click a flag button <span class="mk">1</span>, for example ${b('Frequent')}. The list shows only parts with that flag. Click a second flag to show parts with either one.`,
+     `Try the ${b('Slow')} (1 refill / 30d) or ${b('No refill')} (0 refills / 30d) chips to locate inactive parts that may represent obsolete stock.`,
      `Change the ${b('Refills 30d')} number <span class="mk">3</span> from 8 to 5 and press ${kbd('Tab')}. The counts change.`,
      `Click a row to see a bar chart of its refills on the right. Click ${b('Export CSV')} <span class="mk">4</span> to download the list.`],
     `The number on each flag button matches the number of rows. The chart shows one bar for each refill, as a share of the bin's Max.`,

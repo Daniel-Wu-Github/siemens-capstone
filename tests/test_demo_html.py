@@ -349,3 +349,65 @@ def test_demo_pages_fit_at_desktop_widths(demo, width, height):
             assert page.evaluate('document.documentElement.scrollWidth <= innerWidth'), name
             assert page.evaluate("[...document.querySelectorAll('.tw')].filter(t => t.scrollWidth > t.clientWidth + 1).length") == 0, name
         s.close()
+
+
+
+def test_demo_feedback_submission_and_retrieval(demo):
+    with sync_playwright() as p:
+        s = Page(p, demo['url'])
+        # GET returns empty list initially
+        r = call(s.page, '/api/feedback')
+        assert r['status'] == 200 and r['body'] == []
+
+        # POST a feedback
+        r = call(s.page, '/api/feedback', {'name': 'Tester', 'page': 'predicted', 'message': 'Looks great!'})
+        assert r['status'] == 200 and 'id' in r['body'] and 'created_at' in r['body']
+        fb_id = r['body']['id']
+
+        # GET returns the submitted feedback
+        r = call(s.page, '/api/feedback')
+        assert r['status'] == 200 and len(r['body']) == 1
+        assert r['body'][0]['id'] == fb_id and r['body'][0]['message'] == 'Looks great!' and r['body'][0]['name'] == 'Tester'
+
+        # Validation: empty message
+        r = call(s.page, '/api/feedback', {'message': ''})
+        assert r['status'] == 400
+
+        # Validation: missing message
+        r = call(s.page, '/api/feedback', {'name': 'Test'})
+        assert r['status'] == 400
+
+        s.close()
+
+
+def test_demo_rate_window_toggle_preview_without_save(demo):
+    with sync_playwright() as p:
+        s = Page(p, demo['url'])
+        # Default window is 30
+        view30 = call(s.page, '/api/stock?dataset=demo')
+        assert view30['status'] == 200
+        assert view30['body']['forecast']['settings']['rate_window_days'] == 30
+        assert view30['body']['forecast']['saved_rate_window_days'] == 30
+
+        # Preview with window=60 — settings show 60 but saved stays 30
+        view60 = call(s.page, '/api/stock?dataset=demo&window=60')
+        assert view60['status'] == 200
+        assert view60['body']['forecast']['settings']['rate_window_days'] == 60
+        assert view60['body']['forecast']['saved_rate_window_days'] == 30
+
+        # Underlying setting unchanged
+        view_again = call(s.page, '/api/stock?dataset=demo')
+        assert view_again['body']['forecast']['settings']['rate_window_days'] == 30
+
+        # Invalid window values
+        assert call(s.page, '/api/stock?dataset=demo&window=20')['status'] == 400
+        assert call(s.page, '/api/stock?dataset=demo&window=abc')['status'] == 400
+
+        # Save via POST /api/stock/settings, then confirm persisted
+        r = call(s.page, '/api/stock/settings', {'dataset': 'demo', 'rate_window_days': 60})
+        assert r['status'] == 200 and r['body']['settings']['rate_window_days'] == 60
+        view_saved = call(s.page, '/api/stock?dataset=demo')
+        assert view_saved['body']['forecast']['settings']['rate_window_days'] == 60
+        assert view_saved['body']['forecast']['saved_rate_window_days'] == 60
+
+        s.close()
