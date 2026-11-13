@@ -148,7 +148,7 @@ def test_position_join_includes_storage_type_and_bin():
     other_bin = dict(position, key='SYNTH|401|C', bin='C')
     rows = insights_parts.parts_report([position, other_type, other_bin], [inventory])['parts']
     assert [row['refills_30d'] for row in rows] == [1, 0, 0]
-    assert rows[1]['history_per_day'] is None and rows[2]['flags'] == []
+    assert rows[1]['history_per_day'] is None and rows[2]['flags'] == ['no_refill']
 
 
 def test_even_median_and_95_percent_boundary():
@@ -161,3 +161,42 @@ def test_http_window_metadata_matches_analytics(stored):
     store, ds = stored
     report = store.parts_insights(ds)
     assert report['window_days'] == 0 and report['window_start'] is None and report['window_end'] is None
+
+
+def test_no_refill_flag_when_zero_refills():
+    row = metrics(qtys=[])
+    assert 'no_refill' in row['flags']
+    assert 'slow_refill' not in row['flags']
+
+
+def test_slow_refill_flag_when_one_refill():
+    row = metrics(qtys=[60])
+    assert 'slow_refill' in row['flags']
+    assert 'no_refill' not in row['flags']
+
+
+def test_no_slow_flag_when_two_or_more_refills():
+    row = metrics(qtys=[60, 60])
+    assert 'slow_refill' not in row['flags']
+    assert 'no_refill' not in row['flags']
+
+
+def test_slow_and_no_refill_in_summary_counts():
+    p_none, i_none = fixture(qtys=[], schedule=10)
+    p_slow, i_slow = fixture(qtys=[60], schedule=10)
+    p_slow.update(key='SLOW|401|B', material='SLOW', bin='B2')
+    i_slow.update(material='SLOW', bin='B2')
+    p_ok, i_ok = fixture(qtys=[60, 60], schedule=10)
+    p_ok.update(key='OK|401|B', material='OK', bin='B3')
+    i_ok.update(material='OK', bin='B3')
+    report = insights_parts.parts_report([p_none, p_slow, p_ok], [i_none, i_slow, i_ok])
+    assert report['summary']['no_refill'] == 1
+    assert report['summary']['slow_refill'] == 1
+    assert report['summary']['flagged'] == 2  # no_refill + slow_refill are each flagged
+
+
+def test_no_refill_and_short_refill_do_not_coexist():
+    """Zero refills cannot be a short refill (no median to compare)."""
+    row = metrics(qtys=[])
+    assert 'short_refills' not in row['flags']
+

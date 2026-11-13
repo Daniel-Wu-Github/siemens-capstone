@@ -54,6 +54,10 @@ def part_metrics(position, inventory_row, thresholds):
     if med is not None and len(pcts) >= thresholds['min_refills'] and med < thresholds['refill_size_pct']: flags.append('short_refills')
     if len(refills) > thresholds['refills_30d']: flags.append('frequent_refills')
     if divergence is not None and divergence > thresholds['divergence_pct']: flags.append('divergent')
+    if len(refills) == 0:
+        flags.append('no_refill')
+    elif len(refills) == 1:
+        flags.append('slow_refill')
     result = {key: position.get(key) for key in CSV_FIELDS[:8]}
     result['key'] = position_key(position.get('material'), position.get('storage_type'), position.get('bin'))
     result.update(refills_30d=len(refills), refills=refills, median_refill_pct=med,
@@ -71,7 +75,7 @@ def parts_report(positions, inventory, thresholds=None):
     summary = dict(positions=len(parts), flagged=sum(bool(p['flags']) for p in parts),
                    median_refill_pct=median(pcts) if pcts else None,
                    share_refills_95=sum(p >= 95 for p in pcts) / len(pcts) if pcts else None)
-    summary.update({flag: sum(flag in p['flags'] for p in parts) for flag in ('short_refills', 'frequent_refills', 'divergent')})
+    summary.update({flag: sum(flag in p['flags'] for p in parts) for flag in ('short_refills', 'frequent_refills', 'divergent', 'slow_refill', 'no_refill')})
     return dict(thresholds=thresholds, summary=summary, notes=list(NOTES), parts=parts)
 
 

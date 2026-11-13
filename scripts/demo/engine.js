@@ -182,10 +182,12 @@ function partsReport(th) {
     if (p.median_refill_pct !== null && pcts.length >= th.min_refills && p.median_refill_pct < th.refill_size_pct) flags.push('short_refills');
     if (p.refills.length > th.refills_30d) flags.push('frequent_refills');
     if (p.divergence_pct !== null && p.divergence_pct > th.divergence_pct) flags.push('divergent');
+    if (p.refills.length === 0) flags.push('no_refill');
+    else if (p.refills.length === 1) flags.push('slow_refill');
     return Object.assign(p, {flags});
   });
   const summary = {...DATA.parts.summary, flagged: parts.filter(p => p.flags.length).length};
-  for (const f of ['short_refills', 'frequent_refills', 'divergent']) summary[f] = parts.filter(p => p.flags.includes(f)).length;
+  for (const f of ['short_refills', 'frequent_refills', 'divergent', 'slow_refill', 'no_refill']) summary[f] = parts.filter(p => p.flags.includes(f)).length;
   return {thresholds: th, summary, notes: clone(DATA.parts.notes), parts, dataset_id: DATA.dataset_id,
     window_days: DATA.parts.window_days, window_start: DATA.parts.window_start, window_end: DATA.parts.window_end};
 }

@@ -525,7 +525,9 @@ function partDetailHtml(p) {
 const FLAG_INFO = [
   ['short_refills', 'Short refill', 'alert', th => `The median refill is under ${fmt(th.refill_size_pct)}% of the bin's Max, with at least ${fmt(th.min_refills)} refills in the window. The bin may be refilled in small top-ups rather than to Max.`],
   ['frequent_refills', 'Frequent', 'predicted', th => `More than ${fmt(th.refills_30d)} refills in the last 30 days. The bin may be too small for its demand.`],
-  ['divergent', 'Divergent', 'watch', th => `The schedule rate and the transfer-history rate differ by more than ${fmt(th.divergence_pct)}%, so the demand estimate is uncertain.`]];
+  ['divergent', 'Divergent', 'watch', th => `The schedule rate and the transfer-history rate differ by more than ${fmt(th.divergence_pct)}%, so the demand estimate is uncertain.`],
+  ['slow_refill', 'Slow refill', 'predicted', th => `Only 1 refill in the last 30 days. The part may be obsolete or overstocked.`],
+  ['no_refill', 'No refill', 'alert', th => `No refills recorded in the last 30 days. The part may be obsolete or no longer needed in the supermarket.`]];
 function flagLegendHtml(th, sm) {
   const chips = FLAG_INFO.map(([k, label, cls]) => `<button class="chip" type="button" data-flag="${k}" aria-pressed="${partsFlags.includes(k)}"${partsShowAll ? ' disabled' : ''}>${esc(label)} <b>${fmt(sm[k])}</b></button>`).join('')
     + `<button class="chip" type="button" id="flag-all" aria-pressed="${partsShowAll}">All parts <b>${fmt(sm.positions)}</b></button>`;
@@ -565,6 +567,8 @@ function insightsPageHtml() {
       if (f === 'short_refills') return '<span class="tag alert">Short refill</span>';
       if (f === 'frequent_refills') return '<span class="tag predicted">Frequent</span>';
       if (f === 'divergent') return '<span class="tag watch">Divergent</span>';
+      if (f === 'slow_refill') return '<span class="tag predicted">Slow refill</span>';
+      if (f === 'no_refill') return '<span class="tag alert">No refill</span>';
       return `<span class="tag none">${esc(f)}</span>`;
     }).join(' ');
   };
@@ -574,7 +578,9 @@ function insightsPageHtml() {
       [fmt(sm.flagged), 'Parts flagged', 'insights-flagged-count'],
       [fmt(sm.short_refills), `Short refills (< ${fmt(th.refill_size_pct)}%, ≥ ${fmt(th.min_refills)} refills)`],
       [fmt(sm.frequent_refills), `Frequent refills (> ${fmt(th.refills_30d)})`],
-      [fmt(sm.divergent), `Schedule vs history divergent (> ${fmt(th.divergence_pct)}%)`]
+      [fmt(sm.divergent), `Schedule vs history divergent (> ${fmt(th.divergence_pct)}%)`],
+      [fmt(sm.slow_refill), 'Slow refill (1 in 30 d)'],
+      [fmt(sm.no_refill), 'No refill (0 in 30 d)']
     ]) +
     `<div class="note" style="margin-bottom:var(--s4)">Days under minimum: pending until historical bin status is available. Refill size uses the transfer target quantity, not a measured receipt.</div>` +
     flagLegendHtml(th, sm) +

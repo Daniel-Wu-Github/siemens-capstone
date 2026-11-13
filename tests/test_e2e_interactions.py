@@ -319,11 +319,11 @@ def test_replenishment_insights_every_control(tmp_path):
         s = Session(p); page = s.page
         ds = seed(page, base)
         page.goto(base + '/#insights')
-        expect(page.locator('#insights-flagged-count')).to_have_text('3')
+        expect(page.locator('#insights-flagged-count')).to_have_text('59')
         expect(page.locator('.strip')).to_contain_text('Short refills (< 50%, ≥ 3 refills)')
         expect(page.locator('.asof')).to_contain_text('2026-10-01 to 2026-10-10')
         body = '#parts-rows'
-        expect(rows(page, body)).to_have_count(3)
+        expect(rows(page, body)).to_have_count(50)
         expect(rows(page, body).filter(has_text='BSHORT')).to_contain_text('Short refill')
         expect(rows(page, body).filter(has_text='BFREQ')).to_contain_text('Frequent')
         expect(rows(page, body).filter(has_text='BDIV')).to_contain_text('Divergent')
@@ -344,12 +344,17 @@ def test_replenishment_insights_every_control(tmp_path):
             expect(rows(page, body).first).to_contain_text(material)
             chip(flag).click()
             expect(chip(flag)).to_have_attribute('aria-pressed', 'false')
+        chip('no_refill').click()
+        expect(chip('no_refill')).to_have_attribute('aria-pressed', 'true')
+        expect(rows(page, body)).to_have_count(50)
+        chip('no_refill').click()
+        expect(chip('no_refill')).to_have_attribute('aria-pressed', 'false')
         # Any selected flag: two chips show the union.
         chip('short_refills').click(); chip('divergent').click()
         expect(rows(page, body)).to_have_count(2)
         expect(page.locator('#flag-hint')).to_contain_text('any selected flag')
         chip('short_refills').click(); chip('divergent').click()
-        expect(rows(page, body)).to_have_count(3)
+        expect(rows(page, body)).to_have_count(50)
         page.locator('#flag-all').click()
         expect(chip('divergent')).to_be_disabled()
         expect(page.locator('.foot')).to_contain_text('63 matching parts · page 1 of 2')
@@ -375,10 +380,12 @@ def test_replenishment_insights_every_control(tmp_path):
         expect(detail).to_contain_text('Refills in 30 days9')
 
         # Every threshold re-queries the API and updates the CSV link.
-        for field, value, flagged in (('#th-min-refills', '4', '2'), ('#th-refills', '9', '1'), ('#th-divergence', '150', '0'),
-                                      ('#th-refill-pct', '100', '1')):
-            with page.expect_response('**/api/insights/parts?*') as info:
-                page.locator(field).fill(value); page.locator(field).dispatch_event('change')
+        for field, param, value, flagged in (('#th-min-refills', 'min_refills=4', '4', '58'),
+                                             ('#th-refills', 'refills=9', '9', '57'),
+                                             ('#th-divergence', 'divergence=150', '150', '56'),
+                                             ('#th-refill-pct', 'refill_pct=100', '100', '57')):
+            with page.expect_response(lambda r: '/api/insights/parts' in r.url and param in r.url) as info:
+                page.locator(field).fill(value); page.locator(field).press('Tab')
             assert info.value.ok
             expect(page.locator('#insights-flagged-count')).to_have_text(flagged)
         href = page.locator('#export-parts-csv').get_attribute('href')
@@ -388,11 +395,11 @@ def test_replenishment_insights_every_control(tmp_path):
 
         # An invalid threshold keeps the table and restores the last valid value.
         with page.expect_response('**/api/insights/parts?*') as info:
-            page.locator('#th-min-refills').fill('0'); page.locator('#th-min-refills').dispatch_event('change')
+            page.locator('#th-min-refills').fill('0'); page.locator('#th-min-refills').press('Tab')
         assert info.value.status == 400
         expect(page.locator('#toast')).to_contain_text('min_refills must be a number between 1 and 100')
         expect(page.locator('#th-min-refills')).to_have_value('4')
-        expect(page.locator('#insights-flagged-count')).to_have_text('1')
+        expect(page.locator('#insights-flagged-count')).to_have_text('57')
 
         # Export CSV downloads the same report.
         with page.expect_download() as info:
@@ -401,7 +408,8 @@ def test_replenishment_insights_every_control(tmp_path):
         assert download.suggested_filename == 'problem-parts.csv'
         table = list(csv.DictReader(StringIO(open(download.path(), encoding='utf-8').read())))
         assert len(table) == 63
-        assert {r['material']: r['flags'] for r in table if r['flags']} == {'FREQ': 'short_refills'}
+        expected_flags = {'FREQ': 'short_refills', 'NORATE': 'no_refill', **{f: 'no_refill' for f in FILLERS}}
+        assert {r['material']: r['flags'] for r in table if r['flags']} == expected_flags
         s.close()
 
 
