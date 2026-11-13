@@ -43,10 +43,12 @@ def test_predicted_page_strip_table_filter_and_calculation_detail(tmp_path, clea
         for header in ('Demand / day', 'Hours to minimum', 'Tier'):
             expect(page.locator('thead').get_by_text(header, exact=True)).to_be_visible()
         row_pred.click()
-        detail = page.locator('#pred-detail')
-        expect(detail).to_contain_text('How it was calculated')
-        expect(detail).to_contain_text('Hours to minimum')
-        expect(detail).to_contain_text('Suggested quantity')
+        chart = page.locator('#pred-chart')
+        expect(chart.locator('svg')).to_be_visible()
+        viewbox = chart.locator('svg').get_attribute('viewBox')
+        assert viewbox.startswith('0 0 1140'), f'Expected wide chart, got viewBox={viewbox}'
+        expect(chart).to_contain_text('Hours to min')
+        expect(chart).to_contain_text('Suggested qty')
         expect(page.locator('#pred-rows tr')).to_have_count(3)
         page.locator('#pred-filter').select_option(label='All positions')
         expect(page.locator('#pred-rows tr')).to_have_count(4)
@@ -190,3 +192,50 @@ def test_lead_class_select_in_detail_posts_and_updates_the_forecast(tmp_path, cl
         expect(page.locator('#stock-predicted-count')).to_have_text('2')
         assert not errors
         browser.close()
+
+
+@pytest.mark.browser
+def test_predicted_chart_is_full_width(tmp_path, clean_env):
+    """B12: The projection chart renders at full width above the table."""
+    with running_server(tmp_path) as base, sync_playwright() as p:
+        browser, page, ds, errors = open_page(p, base, 'predicted')
+        page.wait_for_selector('#pred-chart svg')
+        svg = page.query_selector('#pred-chart svg')
+        viewbox = svg.get_attribute('viewBox')
+        assert viewbox.startswith('0 0 1140'), f'Expected wide chart, got viewBox={viewbox}'
+        assert page.locator('.cols.table-first').count() == 0
+        assert not errors
+        browser.close()
+
+
+@pytest.mark.browser
+def test_predicted_page_no_horizontal_scroll_1440(tmp_path, clean_env):
+    with running_server(tmp_path) as base, sync_playwright() as p:
+        browser, page, ds, errors = open_page(p, base, 'predicted', viewport={'width': 1440, 'height': 900})
+        page.wait_for_selector('#pred-chart')
+        assert page.evaluate('document.documentElement.scrollWidth <= document.documentElement.clientWidth')
+        assert not errors
+        browser.close()
+
+
+@pytest.mark.browser
+def test_predicted_page_no_horizontal_scroll_1280(tmp_path, clean_env):
+    with running_server(tmp_path) as base, sync_playwright() as p:
+        browser, page, ds, errors = open_page(p, base, 'predicted', viewport={'width': 1280, 'height': 900})
+        page.wait_for_selector('#pred-chart')
+        assert page.evaluate('document.documentElement.scrollWidth <= document.documentElement.clientWidth')
+        assert not errors
+        browser.close()
+
+
+@pytest.mark.browser
+def test_predicted_chart_updates_on_row_selection(tmp_path, clean_env):
+    with running_server(tmp_path) as base, sync_playwright() as p:
+        browser, page, ds, errors = open_page(p, base, 'predicted')
+        row_safe = page.locator('#pred-rows tr', has_text='SAFE')
+        row_safe.click()
+        chart = page.locator('#pred-chart')
+        expect(chart).to_contain_text('SAFE')
+        assert not errors
+        browser.close()
+
