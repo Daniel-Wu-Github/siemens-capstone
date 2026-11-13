@@ -60,6 +60,7 @@ def handler_for(store):
                     return self.respond(200, report)
                 if url.path == '/api/stock': return self.respond(200, store.stock_view(dataset))
                 if url.path == '/api/stock/presets': return self.respond(200, store.list_presets(dataset))
+                if url.path == '/api/feedback': return self.respond(200, store.list_feedback())
                 return self.respond(404, {'error': 'Not found.'})
             except ValueError as exc:
                 return self.respond(400, {'error': str(exc)})
@@ -102,6 +103,7 @@ def handler_for(store):
                 elif url.path == '/api/stock/digest': result = store.stock_digest(dataset)
                 elif url.path == '/api/stock/ack-all': result = store.acknowledge_all_stock_alerts(dataset)
                 elif url.path == '/api/stock/ack': result = store.acknowledge_stock_alert(body.get('id'))
+                elif url.path == '/api/feedback': result = store.submit_feedback(body.get('name'), body.get('page'), body.get('message'))
                 else: return self.respond(404, {'error': 'Not found.'})
                 return self.respond(200, result if result is not None else {'ok': True})
             except (ValueError, TypeError, KeyError, AttributeError) as exc:
