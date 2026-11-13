@@ -452,8 +452,7 @@ ${hit ? `<circle cx="${x(p.hours_to_min)}" cy="${y(p.min)}" r="${wide ? 5 : 4}" 
 <text x="${x0 - 6}" y="${y(p.available) + 4}" text-anchor="end" font-size="${fontSize}">${fmt(p.available)}</text><text x="${x0 - 6}" y="${y1 + 4}" text-anchor="end" font-size="${fontSize}">0</text>
 <text x="${x0}" y="${y1 + (wide ? 20 : 17)}" font-size="${fontSize}">now</text>${tick / scale > 0.15 ? `<text x="${x(Math.min(tick, scale))}" y="${y1 + (wide ? 20 : 17)}" text-anchor="middle" font-size="${fontSize}">${fmt(tick, 0)} h</text>` : ""}<text x="${x1}" y="${y1 + (wide ? 20 : 17)}" text-anchor="end" font-size="${fontSize}">${scale} h</text></svg>`;
 }
-function detailHtml(p, fs) {
-  if (!p) return '<section class="panel"><div class="body empty">Select a row to see how it was calculated.</div></section>';
+function calcStepsHtml(p, fs) {
   const inp = p.demand_inputs || {}, tick = p.lead_hours + fs.safety_hours;
   const used = p.demand_basis || [], dropped = p.demand_dropped || [];
   const steps = [];
@@ -464,11 +463,11 @@ function detailHtml(p, fs) {
   if (p.hours_to_min != null && p.demand_per_day) steps.push(['Hours to minimum', `max(0, ${fmt(p.available)} − ${fmt(p.min)}) / ${fmt(p.demand_per_day, 2)} × 24 = ${fmtHours(p.hours_to_min)}`]);
   steps.push(['Alert threshold', `lead ${fmt(p.lead_hours, 1)} h + safety ${fmt(fs.safety_hours, 1)} h = ${fmt(tick, 1)} h`]);
   steps.push(['Suggested quantity', p.suggested_qty == null ? '—' : fmt(p.suggested_qty)]);
-  const [tc, tt] = tierOf(p);
-  return `<section class="panel"><h2>${esc(p.description || p.material)} ${tag(tc, tt)}</h2><div class="body">${p.hours_to_min != null && p.demand_per_day ? projection(p, tick, fs.watch_hours) : '<div class="note">No projection: this position has no demand rate or is already at its minimum.</div>'}
-<div class="note">${esc(p.material)} · ${esc(p.supermarket)} · ${esc(p.storage_type)} / ${esc(p.bin)}. Shaded: lead + safety window.</div></div></section>
-<section class="panel"><h2>How it was calculated</h2><div class="body">${steps.map(([a, b]) => `<div class="step"><span>${esc(a)}</span><span class="num">${esc(b)}</span></div>`).join('')}
-<div class="step"><span>Lead class</span><span><select class="cell" data-lead-pos="${esc(p.key)}" aria-label="Lead class for ${esc(p.material)} ${esc(p.bin)}"><option value="stocked"${p.lead_class === 'stocked' ? ' selected' : ''}>stocked</option><option value="fab"${p.lead_class === 'fab' ? ' selected' : ''}>fab</option></select></span></div></div></section>`;
+  return `<section class="panel" style="margin-top:var(--s3);border:0;border-top:1px solid var(--line)"><h2>How it was calculated</h2><div class="body">${steps.map(([a, b]) => `<div class="step"><span>${esc(a)}</span><span class="num">${esc(b)}</span></div>`).join('')}</div></section>
+<section class="panel" style="margin-top:var(--s3);border:0;border-top:1px solid var(--line)"><h2>Settings <a class="btn small" href="#settings">Edit</a></h2><div class="body"><dl class="kv"><dt>Lead time<dd>${fmt(fs.lead_hours_stocked, 1)} h stocked · ${fmt(fs.lead_hours_fab, 1)} h fab<dt>Safety buffer<dd>${fmt(fs.safety_hours, 1)} h<dt>Watch window<dd>${fmt(fs.watch_hours, 1)} h<dt>Weights<dd>history ${fmt(fs.weights.history, 1)} · schedule ${fmt(fs.weights.schedule, 1)} · observed ${fmt(fs.weights.observed, 1)}<dt>Divergence<dd>${fmt(fs.divergence_pct)}%</dl></div></section>`;
+}
+function detailHtml(p, fs) {
+  return calcStepsHtml(p, fs);
 }
 const NO_RATE_SHORT = {not_in_bom: 'Not in BOM, no transfers', shared_bom: 'Shared BOM, no transfers', nothing_planned: 'Nothing scheduled, no transfers', zero_rate: 'Zero rate', unweighted: 'Observed only, weight 0'};
 function noRateReasonsHtml(d) {
@@ -488,35 +487,25 @@ function predPageHtml() {
   const sel = d.positions.find(p => p.key === selected) || shown[0] || null; selected = sel ? sel.key : null;
   const withRate = (cs.below_min || 0) + (cs.predicted || 0) + (cs.watch || 0) + (cs.ok || 0);
 
-  const chartHtml = sel && sel.hours_to_min != null && sel.demand_per_day
-    ? `<div class="pred-chart" id="pred-chart">
-        ${projection(sel, sel.lead_hours + fs.safety_hours, fs.watch_hours, true)}
+  const chartHtml = sel
+    ? `<div id="pred-detail"><div class="pred-chart" id="pred-chart">
+        ${sel.hours_to_min != null && sel.demand_per_day
+          ? projection(sel, sel.lead_hours + fs.safety_hours, fs.watch_hours, true)
+          : `<div class="note" style="padding:var(--s4)">No projection: ${esc(sel.description || sel.material)} has no demand rate or is already at its minimum.</div>`}
         <div class="pred-info">
           <dl class="kv" style="display:flex;flex-wrap:wrap;gap:var(--s3) var(--s5);margin:0;width:100%">
             <div><dt>Material</dt><dd>${esc(sel.description || sel.material)}${sel.description && sel.description !== sel.material ? ` <small>(${esc(sel.material)})</small>` : ''}</dd></div>
             <div><dt>Location</dt><dd>${esc(sel.supermarket)} · ${esc(sel.storage_type)} / ${esc(sel.bin)}</dd></div>
             <div><dt>Tier</dt><dd>${tierOf(sel)[1]}</dd></div>
             <div><dt>Hours to min</dt><dd>${fmtHours(sel.hours_to_min)}</dd></div>
-            <div><dt>Demand / day</dt><dd>${fmt(sel.demand_per_day, 2)}</dd></div>
+            <div><dt>Demand / day</dt><dd>${sel.demand_per_day == null ? '—' : fmt(sel.demand_per_day, 2)}</dd></div>
             <div><dt>Suggested qty</dt><dd>${sel.suggested_qty == null ? '—' : fmt(sel.suggested_qty)}</dd></div>
             <div><dt>Lead class</dt><dd><select class="cell" data-lead-pos="${esc(sel.key)}" aria-label="Lead class for ${esc(sel.material)} ${esc(sel.bin)}"><option value="stocked"${sel.lead_class === 'stocked' ? ' selected' : ''}>stocked</option><option value="fab"${sel.lead_class === 'fab' ? ' selected' : ''}>fab</option></select></dd></div>
           </dl>
         </div>
-      </div>`
-    : sel
-      ? `<div class="pred-chart" id="pred-chart">
-          <div class="note" style="padding:var(--s4)">No projection: ${esc(sel.description || sel.material)} has no demand rate or is already at its minimum.</div>
-          <div class="pred-info">
-            <dl class="kv" style="display:flex;flex-wrap:wrap;gap:var(--s3) var(--s5);margin:0;width:100%">
-              <div><dt>Material</dt><dd>${esc(sel.description || sel.material)}${sel.description && sel.description !== sel.material ? ` <small>(${esc(sel.material)})</small>` : ''}</dd></div>
-              <div><dt>Location</dt><dd>${esc(sel.supermarket)} · ${esc(sel.storage_type)} / ${esc(sel.bin)}</dd></div>
-              <div><dt>Tier</dt><dd>${tierOf(sel)[1]}</dd></div>
-              <div><dt>Demand / day</dt><dd>${sel.demand_per_day == null ? '—' : fmt(sel.demand_per_day, 2)}</dd></div>
-              <div><dt>Lead class</dt><dd><select class="cell" data-lead-pos="${esc(sel.key)}" aria-label="Lead class for ${esc(sel.material)} ${esc(sel.bin)}"><option value="stocked"${sel.lead_class === 'stocked' ? ' selected' : ''}>stocked</option><option value="fab"${sel.lead_class === 'fab' ? ' selected' : ''}>fab</option></select></dd></div>
-            </dl>
-          </div>
-        </div>`
-      : '';
+        ${calcStepsHtml(sel, fs)}
+      </div></div>`
+    : '';
 
   return head(title, `Phase 2 · stock as of ${d.snapshot_as_of ? esc(d.snapshot_as_of) : 'undated snapshot'} · ${fmt(withRate)} positions with a demand rate · warns when hours to minimum ≤ lead time + ${fmt(fs.safety_hours)} h`) +
     strip([[fmt(cs.predicted), 'Predicted, emailed', 'stock-predicted-count'], [fmt(cs.watch), `Watch within ${fmt(fs.watch_hours)} h`, 'stock-watch-count'], [fmt(cs.below_min), 'Already below minimum'], [fmt(cs.no_rate), 'No rate, not forecast']], 'compact') +
