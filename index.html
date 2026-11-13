@@ -128,11 +128,20 @@ table.parts td.flags .tag{margin:0 var(--s1) var(--s1) 0;white-space:nowrap}
 th.sortable button{font:inherit;font-weight:inherit;color:inherit;background:none;border:0;padding:0;width:100%;text-align:inherit;cursor:pointer;white-space:nowrap;text-decoration:underline dotted var(--line-strong);text-underline-offset:4px}
 th.sortable button:hover::after,th.sortable button:focus-visible::after{content:" ↕";color:var(--line-strong)}th[aria-sort="ascending"] button::after{content:" ▲";color:var(--accent)}th[aria-sort="descending"] button::after{content:" ▼";color:var(--accent)}
 .why{font-size:var(--t-xs);color:var(--muted)}
+#feedback-overlay{position:fixed;top:0;right:0;bottom:0;width:380px;background:var(--surface);border-left:1px solid var(--line-strong);box-shadow:var(--shadow-overlay);z-index:20;display:flex;flex-direction:column;transform:translateX(100%);transition:transform var(--dur)}
+#feedback-overlay.open{transform:translateX(0)}
+#feedback-overlay h2{margin:0;padding:var(--s4);border-bottom:1px solid var(--line);font-size:var(--t-lg);display:flex;align-items:center}
+#feedback-overlay .body{padding:var(--s3) var(--s4);flex:1;overflow-y:auto}
+#feedback-overlay .form-row{margin-bottom:var(--s3)}
+#feedback-overlay textarea{width:100%;min-height:100px;font:inherit;font-size:var(--t-sm);padding:var(--s2);border:1px solid var(--line-strong);border-radius:var(--radius);resize:vertical}
+#feedback-overlay input{width:100%}
+.fb-btn{margin-top:auto;padding:var(--s2) var(--s3);font-size:var(--t-sm);color:var(--muted);cursor:pointer;border:none;background:none;text-align:left}
+.fb-btn:hover{color:var(--ink)}
 @media(prefers-reduced-motion:reduce){*{transition:none!important}}
 </style>
 </head>
 <body>
-<div class="shell"><aside id="nav" aria-label="Main navigation"></aside><main id="main"><div class="empty">Loading…</div></main></div>
+<div class="shell"><aside id="nav" aria-label="Main navigation"><button class="fb-btn" id="open-feedback">✎ Give feedback</button></aside><main id="main"><div class="empty">Loading…</div></main></div>
 <div id="toast" role="status" aria-live="polite" hidden></div>
 <script>
 'use strict';
@@ -248,7 +257,9 @@ function invalidate() {
 /* ---------- shared pieces ---------- */
 function nav() {
   const link = ([k, t]) => `<a href="#${k}"${k === view ? ' aria-current="page"' : ''}>${t}</a>`;
+  const fb = $('#open-feedback');
   $('#nav').innerHTML = `<div class="brand">Stock Alerts<small>Supermarket bins</small></div>${PAGES.map(link).join('')}<div class="grp">Setup</div>${SETUP.map(link).join('')}`;
+  if (fb) $('#nav').appendChild(fb);
 }
 function head(title, asof, actions = '') {
   return `<header class="page"><div><h1>${esc(title)}</h1><div class="asof">${asof}</div></div><div class="actions">${actions}</div></header>`;
@@ -1068,6 +1079,40 @@ document.addEventListener('click', e => {
 function route() { const h = location.hash.slice(1); view = TITLES[h] ? h : 'stock'; render(); }
 window.addEventListener('hashchange', route);
 (async () => { try { await loadDatasets(); } catch (e) { toast(e.message, true); } route(); })();
+
+/* ---------- Feedback ---------- */
+function initFeedback() {
+  $('#open-feedback')?.addEventListener('click', () => {
+    $('#feedback-overlay').classList.add('open');
+    $('#fb-message').focus();
+  });
+  $('#close-feedback')?.addEventListener('click', () => {
+    $('#feedback-overlay').classList.remove('open');
+  });
+  $('#fb-submit')?.addEventListener('click', async () => {
+    const msg = $('#fb-message').value.trim();
+    if (!msg) { $('#fb-status').textContent = 'Please enter a message.'; return; }
+    $('#fb-submit').disabled = true;
+    try {
+      await api('/api/feedback', {name: $('#fb-name').value, page: location.hash.replace('#','') || 'stock', message: msg});
+      $('#fb-message').value = '';
+      $('#fb-status').textContent = 'Thank you! Feedback saved.';
+      setTimeout(() => { $('#fb-status').textContent = ''; }, 4000);
+    } catch(e) { $('#fb-status').textContent = 'Error: ' + (e.message || 'could not save.'); }
+    finally { $('#fb-submit').disabled = false; }
+  });
+}
+if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', initFeedback);
+else initFeedback();
+initFeedback();
 </script>
+<div id="feedback-overlay">
+  <h2>Give feedback <button class="btn small" id="close-feedback" style="margin-left:auto">✕</button></h2>
+  <div class="body">
+    <div class="form-row"><label for="fb-name">Name (optional)</label><input id="fb-name" class="input" maxlength="100"></div>
+    <div class="form-row"><label for="fb-message">What's on your mind?</label><textarea id="fb-message" maxlength="2000" placeholder="Bug report, suggestion, question…"></textarea></div>
+    <p><button class="btn primary" id="fb-submit">Send feedback</button> <span id="fb-status" class="note" aria-live="polite"></span></p>
+  </div>
+</div>
 </body>
 </html>

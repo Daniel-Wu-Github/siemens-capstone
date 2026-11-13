@@ -55,6 +55,7 @@ class Store:
                 CREATE TABLE IF NOT EXISTS settings_presets(dataset TEXT, name TEXT, created_at TEXT, payload TEXT NOT NULL, PRIMARY KEY(dataset, name));
                 CREATE TABLE IF NOT EXISTS stock_lead_classes(dataset TEXT, position TEXT, lead_class TEXT NOT NULL, PRIMARY KEY(dataset, position));
                 CREATE TABLE IF NOT EXISTS notifications(id TEXT PRIMARY KEY, dataset TEXT, created_at TEXT, payload TEXT NOT NULL);
+                CREATE TABLE IF NOT EXISTS feedback(id TEXT PRIMARY KEY, created_at TEXT NOT NULL, name TEXT, page TEXT, message TEXT NOT NULL);
             ''')
             for r in db.execute('SELECT dataset, payload FROM stock_settings').fetchall():
                 p = json.loads(r['payload'])
@@ -455,3 +456,22 @@ class Store:
             db.execute("UPDATE stock_alerts SET status='Acknowledged', payload=? WHERE id=?", (encoded(payload), alert_id))
             self._event(db, row['dataset'], f"Stock alert acknowledged for {payload['material']} / {payload['bin']}.")
         return dict(ok=True)
+
+    def submit_feedback(self, name, page, message):
+        """Store one feedback entry. No dataset scoping — feedback is global."""
+        message = (message or '').strip()
+        if not message or len(message) > 2000:
+            raise ValueError('Feedback message must be 1–2000 characters.')
+        name = (name or '').strip()[:100] or None
+        page = (page or '').strip()[:50] or None
+        entry_id = uuid.uuid4().hex
+        with self.connection() as db:
+            db.execute('INSERT INTO feedback VALUES(?,?,?,?,?)',
+                       (entry_id, now(), name, page, message))
+        return dict(id=entry_id, created_at=now())
+
+    def list_feedback(self):
+        with self.connection() as db:
+            return [dict(r) for r in db.execute(
+                'SELECT id, created_at, name, page, message FROM feedback ORDER BY rowid DESC LIMIT 200')]
+
