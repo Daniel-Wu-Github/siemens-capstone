@@ -116,9 +116,17 @@ table.parts td.flags .tag{margin:0 var(--s1) var(--s1) 0;white-space:nowrap}
 .strip.compact div{padding:var(--s2) var(--s3);min-width:120px}.strip.compact b{font-size:var(--t-lg)}
 .tools.prominent input:not([type]),.tools.prominent select{min-height:40px;font-size:var(--t-md)}
 .table-first table{font-size:var(--t-md)}.table-first td{height:44px}
-.pred-chart{background:var(--surface);border:1px solid var(--line);padding:var(--s3) var(--s4);margin-bottom:var(--s4)}
-.pred-chart svg{display:block;max-width:100%;height:auto}
-.pred-info{display:flex;flex-wrap:wrap;gap:var(--s3) var(--s5);padding:var(--s2) var(--s4);border-top:1px solid var(--line);font-size:var(--t-sm);color:var(--ink-2)}
+#pred-detail{display:grid;grid-template-columns:minmax(0,1.3fr) minmax(320px,1fr);gap:var(--s4);margin-bottom:var(--s4);align-items:start}
+@media(max-width:1100px){#pred-detail{grid-template-columns:1fr}}
+.pred-chart-card{background:var(--surface);border:1px solid var(--line);margin-bottom:0}
+.pred-chart-card>h2{margin:0;padding:var(--s2) var(--s3);font-size:var(--t-sm);font-weight:700;border-bottom:1px solid var(--line);display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:var(--s1)}
+.pred-chart-card .body{padding:var(--s3) var(--s3) var(--s2)}
+.pred-side-cards{display:flex;flex-direction:column;gap:var(--s3)}
+.pred-side-cards .panel{margin-bottom:0}
+.pred-side-cards .panel>h2{margin:0;padding:var(--s2) var(--s3);font-size:var(--t-sm);font-weight:700;border-bottom:1px solid var(--line);display:flex;justify-content:space-between;align-items:center}
+.pred-side-cards .body{padding:var(--s2) var(--s3)}
+.pred-chart svg{display:block;width:100%;height:auto;max-height:220px}
+.pred-info{display:flex;flex-wrap:wrap;gap:var(--s2) var(--s3);padding:var(--s2) 0 0;border-top:1px solid var(--line);font-size:var(--t-sm);color:var(--ink-2);margin-top:var(--s2)}
 .pred-info dt{color:var(--muted);font-size:var(--t-xs)}.pred-info dd{margin:0;font-weight:600}
 .fail-banner{border:1px solid var(--alert);background:var(--alert-wash);color:var(--alert);padding:var(--s3) var(--s4);margin-bottom:var(--s4);font-size:var(--t-sm)}
 .chips{display:flex;flex-wrap:wrap;gap:var(--s2);margin-bottom:var(--s2)}
@@ -463,8 +471,10 @@ function calcStepsHtml(p, fs) {
   if (p.hours_to_min != null && p.demand_per_day) steps.push(['Hours to minimum', `max(0, ${fmt(p.available)} − ${fmt(p.min)}) / ${fmt(p.demand_per_day, 2)} × 24 = ${fmtHours(p.hours_to_min)}`]);
   steps.push(['Alert threshold', `lead ${fmt(p.lead_hours, 1)} h + safety ${fmt(fs.safety_hours, 1)} h = ${fmt(tick, 1)} h`]);
   steps.push(['Suggested quantity', p.suggested_qty == null ? '—' : fmt(p.suggested_qty)]);
-  return `<section class="panel" style="margin-top:var(--s3);border:0;border-top:1px solid var(--line)"><h2>How it was calculated</h2><div class="body">${steps.map(([a, b]) => `<div class="step"><span>${esc(a)}</span><span class="num">${esc(b)}</span></div>`).join('')}</div></section>
-<section class="panel" style="margin-top:var(--s3);border:0;border-top:1px solid var(--line)"><h2>Settings <a class="btn small" href="#settings">Edit</a></h2><div class="body"><dl class="kv"><dt>Lead time<dd>${fmt(fs.lead_hours_stocked, 1)} h stocked · ${fmt(fs.lead_hours_fab, 1)} h fab<dt>Safety buffer<dd>${fmt(fs.safety_hours, 1)} h<dt>Watch window<dd>${fmt(fs.watch_hours, 1)} h<dt>Weights<dd>history ${fmt(fs.weights.history, 1)} · schedule ${fmt(fs.weights.schedule, 1)} · observed ${fmt(fs.weights.observed, 1)}<dt>Divergence<dd>${fmt(fs.divergence_pct)}%</dl></div></section>`;
+  return `<div class="pred-side-cards">
+<section class="panel"><h2>How it was calculated</h2><div class="body">${steps.map(([a, b]) => `<div class="step"><span>${esc(a)}</span><span class="num">${esc(b)}</span></div>`).join('')}</div></section>
+<section class="panel"><h2>Settings <a class="btn small" href="#settings">Edit</a></h2><div class="body"><dl class="kv"><dt>Lead time<dd>${fmt(fs.lead_hours_stocked, 1)} h stocked · ${fmt(fs.lead_hours_fab, 1)} h fab<dt>Safety buffer<dd>${fmt(fs.safety_hours, 1)} h<dt>Watch window<dd>${fmt(fs.watch_hours, 1)} h<dt>Weights<dd>history ${fmt(fs.weights.history, 1)} · schedule ${fmt(fs.weights.schedule, 1)} · observed ${fmt(fs.weights.observed, 1)}<dt>Divergence<dd>${fmt(fs.divergence_pct)}%</dl></div></section>
+</div>`;
 }
 function detailHtml(p, fs) {
   return calcStepsHtml(p, fs);
@@ -488,23 +498,28 @@ function predPageHtml() {
   const withRate = (cs.below_min || 0) + (cs.predicted || 0) + (cs.watch || 0) + (cs.ok || 0);
 
   const chartHtml = sel
-    ? `<div id="pred-detail"><div class="pred-chart" id="pred-chart">
-        ${sel.hours_to_min != null && sel.demand_per_day
-          ? projection(sel, sel.lead_hours + fs.safety_hours, fs.watch_hours, true)
-          : `<div class="note" style="padding:var(--s4)">No projection: ${esc(sel.description || sel.material)} has no demand rate or is already at its minimum.</div>`}
-        <div class="pred-info">
-          <dl class="kv" style="display:flex;flex-wrap:wrap;gap:var(--s3) var(--s5);margin:0;width:100%">
-            <div><dt>Material</dt><dd>${esc(sel.description || sel.material)}${sel.description && sel.description !== sel.material ? ` <small>(${esc(sel.material)})</small>` : ''}</dd></div>
-            <div><dt>Location</dt><dd>${esc(sel.supermarket)} · ${esc(sel.storage_type)} / ${esc(sel.bin)}</dd></div>
-            <div><dt>Tier</dt><dd>${tierOf(sel)[1]}</dd></div>
-            <div><dt>Hours to min</dt><dd>${fmtHours(sel.hours_to_min)}</dd></div>
-            <div><dt>Demand / day</dt><dd>${sel.demand_per_day == null ? '—' : fmt(sel.demand_per_day, 2)}</dd></div>
-            <div><dt>Suggested qty</dt><dd>${sel.suggested_qty == null ? '—' : fmt(sel.suggested_qty)}</dd></div>
-            <div><dt>Lead class</dt><dd><select class="cell" data-lead-pos="${esc(sel.key)}" aria-label="Lead class for ${esc(sel.material)} ${esc(sel.bin)}"><option value="stocked"${sel.lead_class === 'stocked' ? ' selected' : ''}>stocked</option><option value="fab"${sel.lead_class === 'fab' ? ' selected' : ''}>fab</option></select></dd></div>
-          </dl>
-        </div>
+    ? `<div id="pred-detail">
+        <section class="panel pred-chart-card">
+          <h2><span>${esc(sel.description || sel.material)}</span> <small class="why" style="font-weight:400">${esc(sel.material)} · ${esc(sel.supermarket)} · ${esc(sel.storage_type)} / ${esc(sel.bin)}</small></h2>
+          <div class="body">
+            <div id="pred-chart">
+              ${sel.hours_to_min != null && sel.demand_per_day
+                ? projection(sel, sel.lead_hours + fs.safety_hours, fs.watch_hours, true)
+                : `<div class="note" style="padding:var(--s4)">No projection: ${esc(sel.description || sel.material)} has no demand rate or is already at its minimum.</div>`}
+              <div class="pred-info">
+                <dl class="kv" style="display:flex;flex-wrap:wrap;gap:var(--s2) var(--s4);margin:0;width:100%">
+                  <div><dt>Tier</dt><dd>${tierOf(sel)[1]}</dd></div>
+                  <div><dt>Hours to min</dt><dd>${fmtHours(sel.hours_to_min)}</dd></div>
+                  <div><dt>Demand / day</dt><dd>${sel.demand_per_day == null ? '—' : fmt(sel.demand_per_day, 2)}</dd></div>
+                  <div><dt>Suggested qty</dt><dd>${sel.suggested_qty == null ? '—' : fmt(sel.suggested_qty)}</dd></div>
+                  <div><dt>Lead class</dt><dd><select class="cell" data-lead-pos="${esc(sel.key)}" aria-label="Lead class for ${esc(sel.material)} ${esc(sel.bin)}"><option value="stocked"${sel.lead_class === 'stocked' ? ' selected' : ''}>stocked</option><option value="fab"${sel.lead_class === 'fab' ? ' selected' : ''}>fab</option></select></dd></div>
+                </dl>
+              </div>
+            </div>
+          </div>
+        </section>
         ${calcStepsHtml(sel, fs)}
-      </div></div>`
+      </div>`
     : '';
 
   return head(title, `Phase 2 · stock as of ${d.snapshot_as_of ? esc(d.snapshot_as_of) : 'undated snapshot'} · ${fmt(withRate)} positions with a demand rate · warns when hours to minimum ≤ lead time + ${fmt(fs.safety_hours)} h`) +
