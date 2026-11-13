@@ -65,5 +65,6 @@ Set environment variables before starting (they are read at start-up): `SMTP_HOS
 - The repository is public: never commit Siemens workbooks, database files, row-level examples or credentials. Keep them in the ignored `data/` folder.
 - Build a workspace from source files: `python server.py --db new.sqlite3 --import-workbook data/Prod_Capstone_Data.xlsx --attach data/Min_Max-SM.xlsx --attach data/BOMEXAMPLE.xlsx --attach Bin_Status_2026-10-22.xlsx --quiet --no-serve`.
 - Offline demand-rate backtest: `python scripts/backtest_rates.py --db copy.sqlite3` (aggregate reports in ignored `outputs/`).
+- Build the single-file demo (invented data, one HTML file plus a zip, with a testing guide): `python scripts/build_demo_html.py`.
 - Build the UAT zip: `python scripts/build_uat_zip.py --db data/handoff/siemens_uat.sqlite3`.
 - Tests: `pip install -r requirements-dev.txt`, `python -m playwright install chromium`, `python -m pytest -q` (`-m 'not browser'` for backend only).
