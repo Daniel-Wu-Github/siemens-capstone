@@ -46,7 +46,7 @@ def test_predicted_page_strip_table_filter_and_calculation_detail(tmp_path, clea
         chart = page.locator('#pred-chart')
         expect(chart.locator('svg')).to_be_visible()
         viewbox = chart.locator('svg').get_attribute('viewBox')
-        assert viewbox.startswith('0 0 1140'), f'Expected wide chart, got viewBox={viewbox}'
+        assert viewbox.startswith('0 0 760'), f'Expected labelled chart, got viewBox={viewbox}'
         expect(chart).to_contain_text('Hours to min')
         expect(chart).to_contain_text('Suggested qty')
         expect(page.locator('#pred-rows tr')).to_have_count(3)
@@ -202,7 +202,12 @@ def test_predicted_chart_is_full_width(tmp_path, clean_env):
         page.wait_for_selector('#pred-chart svg')
         svg = page.query_selector('#pred-chart svg')
         viewbox = svg.get_attribute('viewBox')
-        assert viewbox.startswith('0 0 1140'), f'Expected wide chart, got viewBox={viewbox}'
+        assert viewbox.startswith('0 0 760'), f'Expected labelled chart, got viewBox={viewbox}'
+        page.locator('#pred-rows tr[data-pred]', has_text='Predicted').first.click()
+        chart = page.locator('#pred-chart svg')
+        expect(chart.locator('text', has_text='Hits minimum in')).to_have_count(1)
+        expect(chart.locator('text', has_text='Empty in')).to_have_count(1)
+        expect(page.locator('#pred-chart .chart-legend')).to_have_count(1)
         assert page.locator('.cols.table-first').count() == 0
         assert not errors
         browser.close()

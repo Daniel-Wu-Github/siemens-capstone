@@ -9,7 +9,7 @@
 /* type */--font:-apple-system,"Segoe UI",Helvetica,Arial,sans-serif;--t-xs:12px;--t-sm:13px;--t-md:14px;--t-lg:16px;--t-xl:20px;--t-2xl:28px;--lh-data:1.3;--lh-body:1.45;
 /* colour: neutrals */--bg:#f4f5f6;--surface:#fff;--sunken:#eceef0;--ink:#17403f;--brand:#009999;--dark:#16202a;--ink-2:#3b4752;--muted:#5b6773;--line:#d5d9de;--line-strong:#9aa4ae;
 /* colour: accent (existing petrol) */--accent:#00757a;--accent-ink:#fff;--accent-wash:#e4f1f1;
-/* colour: status, always paired with a text label */--alert:#b3261e;--alert-wash:#fbe9e7;--predicted:#9a5200;--predicted-wash:#fdf0dc;--watch:#2b5c8a;--watch-wash:#e6eef6;--ok:#2e6b3a;
+/* colour: status, always paired with a text label */--alert:#b3261e;--alert-wash:#fbe9e7;--ok-wash:#e6f3ea;--predicted:#9a5200;--predicted-wash:#fdf0dc;--watch:#2b5c8a;--watch-wash:#e6eef6;--ok:#2e6b3a;
 /* shape */--radius:2px;--focus:0 0 0 2px #fff,0 0 0 4px var(--accent);--shadow-overlay:0 4px 16px rgba(22,32,42,.18);
 /* motion */--dur:120ms;
 }
@@ -121,7 +121,7 @@ table.parts td.flags .tag{margin:0 var(--s1) var(--s1) 0;white-space:nowrap}
 .pred-chart-card,.pred-calc-card{background:var(--surface);border:1px solid var(--line);margin-bottom:0;display:flex;flex-direction:column}
 .pred-chart-card>h2,.pred-calc-card>h2{margin:0;padding:var(--s2) var(--s3);font-size:var(--t-sm);font-weight:700;border-bottom:1px solid var(--line);display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:var(--s1);min-height:38px}
 .pred-chart-card .body,.pred-calc-card .body{padding:var(--s3);flex:1;display:flex;flex-direction:column}
-.pred-chart svg{display:block;width:100%;height:auto;max-height:220px}
+.pred-chart svg{display:block;width:100%;height:auto;max-height:300px}.chart-legend{display:flex;flex-wrap:wrap;gap:var(--s1) var(--s4);font-size:var(--t-xs);color:var(--ink-2);margin-top:var(--s2)}.chart-legend .sw{display:inline-block;width:12px;height:12px;margin-right:6px;vertical-align:-1px;border:1px solid var(--line-strong)}.chart-legend .sw.dot{border-radius:50%;border-width:2px}
 .pred-info{display:flex;flex-wrap:wrap;gap:var(--s2) var(--s4);padding:var(--s2) 0 0;border-top:1px solid var(--line);font-size:var(--t-sm);color:var(--ink-2);margin-top:auto}
 .pred-info dt{color:var(--muted);font-size:var(--t-xs)}.pred-info dd{margin:0;font-weight:600}
 .fail-banner{border:1px solid var(--alert);background:var(--alert-wash);color:var(--alert);padding:var(--s3) var(--s4);margin-bottom:var(--s4);font-size:var(--t-sm)}
@@ -440,26 +440,41 @@ function predRows() {
   return d.positions.filter(p => inView(p) && [p.material, p.description, p.supermarket, p.bin].join(' ').toLowerCase().includes(q))
     .sort((a, b) => (a.hours_to_min ?? 1e9) - (b.hours_to_min ?? 1e9) || a.material.localeCompare(b.material));
 }
-function projection(p, tick, scale, wide) {
-  const W = wide ? 1140 : 345, H = wide ? 260 : 150;
-  const x0 = wide ? 56 : 40, x1 = wide ? W - 40 : 310;
-  const y0 = wide ? 16 : 10, y1 = wide ? H - 40 : 120;
-  const rate = (p.demand_per_day || 0) / 24;
-  const top = Math.max(p.available, p.min, 1) * 1.1;
-  const y = v => y1 - Math.max(0, Math.min(v, top)) / top * (y1 - y0);
-  const x = h => x0 + h / scale * (x1 - x0);
-  const endV = p.available - rate * scale;
-  const hit = p.hours_to_min != null && p.hours_to_min <= scale && rate > 0;
-  const fontSize = wide ? '13' : '12';
-  return `<svg viewBox="0 0 ${W} ${H}" width="100%"${wide ? ` style="max-height:280px"` : ''} role="img" aria-label="${hit ? `Projected stock reaches the minimum in ${fmtHours(p.hours_to_min)}` : 'Projected stock over the next ' + scale + ' hours'}">
-<rect x="${x0}" y="${y0}" width="${x(Math.min(tick, scale)) - x0}" height="${y1 - y0}" fill="var(--predicted-wash)"/>
-<line x1="${x0}" x2="${x1}" y1="${y(p.min)}" y2="${y(p.min)}" stroke="var(--alert)" stroke-dasharray="4 3"/><text x="${x1 + 4}" y="${y(p.min) + 4}" font-size="${fontSize}">min ${fmt(p.min)}</text>
-${p.max != null && p.max > 0 ? `<line x1="${x0}" x2="${x1}" y1="${y(p.max)}" y2="${y(p.max)}" stroke="var(--ok)" stroke-dasharray="4 3" opacity="0.5"/><text x="${x1 + 4}" y="${y(p.max) + 4}" font-size="${fontSize}" fill="var(--ok)">max</text>` : ''}
-<line x1="${x0}" y1="${y(p.available)}" x2="${x1}" y2="${y(endV)}" stroke="var(--dark)" stroke-width="2"/>
-${hit ? `<circle cx="${x(p.hours_to_min)}" cy="${y(p.min)}" r="${wide ? 5 : 4}" fill="var(--dark)"/>` : ''}
+function projection(p, tick, watchHours) {
+  // Straight-line projection of stock from now. Axis is hours from now: the snapshot has no time of day.
+  const W = 760, H = 270, x0 = 48, x1 = W - 62, y0 = 22, y1 = H - 50;
+  const rate = (p.demand_per_day || 0) / 24, avail = p.available, mn = p.min;
+  const emptyH = rate > 0 ? avail / rate : null;
+  const hitH = avail <= mn ? 0 : (rate > 0 ? (avail - mn) / rate : null);
+  const scale = Math.min(Math.max((emptyH || watchHours) * 1.08, 6), 168);
+  const top = Math.max(avail, mn, 1) * 1.1;
+  const clamp = v => Math.max(0, Math.min(v, top));
+  const y = v => y1 - clamp(v) / top * (y1 - y0);
+  const x = h => x0 + Math.min(h, scale) / scale * (x1 - x0);
+  const steps = [1, 2, 3, 6, 12, 24, 48], step = steps.find(s => scale / s <= 7) || 48;
+  const ticks = []; for (let h = 0; h <= scale + 1e-9; h += step) ticks.push(h);
+  const emptyIn = emptyH != null && emptyH <= scale, hitIn = hitH != null && hitH > 0 && hitH <= scale;
+  const endV = Math.max(0, avail - rate * scale);
+  const lineEnd = emptyIn ? [x(emptyH), y(0)] : [x(scale), y(endV)];
+  const flip = h => x(h) > x1 - 200;
+  const lab = (h, ty, t1, t2) => `<text x="${x(h) + (flip(h) ? -14 : 14)}" y="${ty}" text-anchor="${flip(h) ? 'end' : 'start'}" font-size="14" font-weight="700" fill="var(--alert)">${t1}</text><text x="${x(h) + (flip(h) ? -14 : 14)}" y="${ty + 16}" text-anchor="${flip(h) ? 'end' : 'start'}" font-size="12" fill="var(--ink-2)">${t2}</text>`;
+  const label = hitH === 0 ? 'Projected stock, already at or below the minimum' : `Projected stock reaches the minimum in ${fmtHours(hitH)}${emptyIn ? ` and is empty in ${fmtHours(emptyH)}` : ''}`;
+  return `<svg viewBox="0 0 ${W} ${H}" width="100%" role="img" aria-label="${label}">
+<rect x="${x0}" y="${y0}" width="${x1 - x0}" height="${Math.max(0, y(mn) - y0)}" fill="var(--ok-wash)"/>
+<rect x="${x0}" y="${y(mn)}" width="${x1 - x0}" height="${y1 - y(mn)}" fill="var(--alert-wash)"/>
+<line x1="${x0}" x2="${x1}" y1="${y(mn)}" y2="${y(mn)}" stroke="var(--alert)" stroke-dasharray="5 4" stroke-width="1.5"/>
+<text x="${x1 - 6}" y="${y(mn) - 8}" text-anchor="end" font-size="13" font-weight="700" fill="var(--alert)">Minimum: ${fmt(mn)}</text>
+<line x1="${x0}" y1="${y(avail)}" x2="${lineEnd[0]}" y2="${lineEnd[1]}" stroke="var(--dark)" stroke-width="3"/>
 <line x1="${x0}" x2="${x0}" y1="${y0}" y2="${y1}" stroke="var(--line-strong)"/><line x1="${x0}" x2="${x1}" y1="${y1}" y2="${y1}" stroke="var(--line-strong)"/>
-<text x="${x0 - 6}" y="${y(p.available) + 4}" text-anchor="end" font-size="${fontSize}">${fmt(p.available)}</text><text x="${x0 - 6}" y="${y1 + 4}" text-anchor="end" font-size="${fontSize}">0</text>
-<text x="${x0}" y="${y1 + (wide ? 20 : 17)}" font-size="${fontSize}">now</text>${tick / scale > 0.15 ? `<text x="${x(Math.min(tick, scale))}" y="${y1 + (wide ? 20 : 17)}" text-anchor="middle" font-size="${fontSize}">${fmt(tick, 0)} h</text>` : ""}<text x="${x1}" y="${y1 + (wide ? 20 : 17)}" text-anchor="end" font-size="${fontSize}">${scale} h</text></svg>`;
+<text x="${x0 - 8}" y="${y(avail) + 5}" text-anchor="end" font-size="13" font-weight="700" fill="var(--dark)">${fmt(avail)}</text><text x="${x0 - 8}" y="${y1 + 5}" text-anchor="end" font-size="13">0</text>
+${ticks.map(h => `<line x1="${x(h)}" x2="${x(h)}" y1="${y1}" y2="${y1 + 6}" stroke="var(--line-strong)"/><text x="${x(h)}" y="${y1 + 22}" text-anchor="middle" font-size="13">${h === 0 ? 'now' : '+' + h + ' h'}</text>`).join('')}
+${hitH === 0 ? `<text x="${x0 + 12}" y="${y0 + 18}" font-size="14" font-weight="700" fill="var(--alert)">Already at or below the minimum</text>` : ''}
+${hitIn ? `<circle cx="${x(hitH)}" cy="${y(mn)}" r="7" fill="#fff" stroke="var(--alert)" stroke-width="3"/>${lab(hitH, y(mn) - 42, 'Hits minimum in ' + fmtHours(hitH), 'projected ' + fmt(mn) + ' pcs')}` : ''}
+${emptyIn ? `<circle cx="${x(emptyH)}" cy="${y(0)}" r="7" fill="var(--alert)"/>${lab(emptyH, y(0) - 62, 'Empty in ' + fmtHours(emptyH), 'projected 0 pcs')}` : ''}
+${!emptyIn && emptyH != null ? `<text x="${x1}" y="${y1 - 10}" text-anchor="end" font-size="13" fill="var(--ink-2)">Empty in ${fmtHours(emptyH)} (past the end of this chart)</text>` : ''}
+<circle cx="${x0}" cy="${y(avail)}" r="7" fill="var(--brand)" stroke="var(--dark)" stroke-width="3"/>
+</svg>
+<div class="chart-legend"><span><i class="sw" style="background:var(--dark)"></i>Projected stock (straight line = average pace)</span><span><i class="sw" style="background:var(--ok-wash)"></i>Above minimum</span><span><i class="sw" style="background:var(--alert-wash)"></i>Below minimum</span><span><i class="sw dot" style="background:var(--brand);border-color:var(--dark)"></i>Now</span><span><i class="sw dot" style="background:#fff;border-color:var(--alert)"></i>Hits minimum</span><span><i class="sw dot" style="background:var(--alert);border-color:var(--alert)"></i>Empty</span></div>`;
 }
 function calcStepsHtml(p, fs) {
   const inp = p.demand_inputs || {}, tick = p.lead_hours + fs.safety_hours;
@@ -501,7 +516,7 @@ function predPageHtml() {
           <h2><span>${esc(sel.description || sel.material)}</span> <small class="why" style="font-weight:400">${esc(sel.material)} · ${esc(sel.supermarket)} · ${esc(sel.storage_type)} / ${esc(sel.bin)}</small></h2>
           <div class="body pred-chart">
             ${sel.hours_to_min != null && sel.demand_per_day
-              ? projection(sel, sel.lead_hours + fs.safety_hours, fs.watch_hours, true)
+              ? projection(sel, sel.lead_hours + fs.safety_hours, fs.watch_hours)
               : `<div class="note" style="padding:var(--s4)">No projection: ${esc(sel.description || sel.material)} has no demand rate or is already at its minimum.</div>`}
             <div class="pred-info">
               <dl class="kv" style="display:flex;flex-wrap:wrap;gap:var(--s2) var(--s4);margin:0;width:100%">
