@@ -2,6 +2,68 @@
 
 Texas A&M CSCE 482 capstone for Siemens Digitalization and Data. The prototype warns warehouse staff before supermarket bins run out: it flags bins already below minimum, predicts which bins will get there soon, and shows which parts have replenishment problems. It runs on one computer, in a browser, from one database file.
 
+## What this project does
+
+Warehouse supermarket bins hold small parts for production lines. When a bin runs below its minimum, the line can stall. This prototype reads Siemens exports (bin status, Min/Max, bill of materials, replenishment transfers, planned production) and shows three things:
+
+- **Stock alerts:** bins already at or below minimum, with how long each alert has been open and when the bin was last replenished. Alerts can be acknowledged and a digest can be sent (saved as a file by default).
+- **Predicted alerts:** bins forecast to reach their minimum within lead time plus a safety buffer, with a countdown chart per bin. The forecast is a straight-line estimate from a daily demand rate: `demand = (2 × history + 1 × schedule) / 3`. The formulas are documented in [`docs/formulas.md`](docs/formulas.md) and are locked.
+- **Replenishment insights:** parts whose refills are short, frequent or divergent, with CSV export.
+
+It is a local, single-user prototype: one Python process, one SQLite file, one HTML page. It is not a production system and it is not connected to any Siemens system.
+
+## Repository layout
+
+| Path | Purpose |
+| --- | --- |
+| `index.html` | The whole user interface (HTML, CSS, JavaScript, SVG charts; no build step, no external assets) |
+| `server.py` | Starts the local HTTP server (loopback only) and can import workbooks from the command line |
+| `src/siemens_capstone/` | Backend: `api.py` (HTTP routes), `store.py` (SQLite persistence, alert lifecycle), `proactive.py` (the locked forecast formulas), `alerts.py` (alert rules and delivery), `ingest.py` (workbook validation), `analytics.py` (replenishment rates and summaries), `insights_parts.py` (refill flags, CSV), `backtest.py` (offline demand-rate check) |
+| `tests/` | pytest suite: unit, API, store and real-browser (Playwright) tests |
+| `scripts/` | `build_demo_html.py` (single-file demo with invented data), `build_uat_zip.py`, `backtest_rates.py`, `backtest_windows.py`; `scripts/demo/` holds the demo's in-browser backend and mock data |
+| `docs/` | `architecture.md`, `formulas.md`, `alerts.md`, `data-inventory.md`, `frontend_design_system.md`, `teams-setup.md` |
+| `run.sh`, `run.bat` | One-step start scripts for Mac/Linux and Windows |
+| `data/`, `outputs/` | Git-ignored: Siemens data, databases and generated reports. Never committed |
+
+## Requirements
+
+- Python 3.11 or newer.
+- Runtime: `openpyxl` (`requirements.txt`). Tests add `pytest` and `playwright` with Chromium (`requirements-dev.txt`).
+- No internet access is needed after installing packages. Nothing is emailed unless SMTP, Teams or webhook variables are set (see below).
+
+## Running it from this repository
+
+```
+python -m venv .venv
+.venv/bin/pip install -r requirements.txt        # Windows: .venv\Scripts\pip
+.venv/bin/python server.py                       # opens on http://127.0.0.1:8765
+```
+
+The repository contains **no Siemens data**, so a fresh start has an empty database (`data/capstone.sqlite3`). Either:
+
+1. open **Data sources** in the app and import the Siemens workbook and reference files, or
+2. try it with invented data, no setup: `pip install -r requirements-dev.txt`, then `python scripts/build_demo_html.py` and open `outputs/Siemens_Replenishment_Demo.html` in a browser.
+
+To run the tests: `python -m playwright install chromium`, then `python -m pytest -q` (add `-m 'not browser'` to skip the browser tests). The final code passes all 517 tests.
+
+## Known limitations
+
+- **The forecast is not validated against real stockouts.** The data has no reliable historical bin-status timeline, so only the daily demand rate was checked on held-out transfers (`src/siemens_capstone/backtest.py`). Do not read "Empty in N h" as a measured prediction.
+- Demand comes from recorded replenishment transfer quantities and planned production, not from measured consumption.
+- The projection is a straight line (average pace). The team compared exponential and recency-weighted variants and flat averages did better on the available data; queuing models are future work.
+- The time axis is hours from now, because the snapshot has no time of day.
+- **Open since** is when this tool detected a breach, not when stock actually fell, and it restarts if the database is re-imported.
+- The default blend (history 2 : schedule 1) and the 3 h lead time are team proposals awaiting sponsor confirmation.
+- Single user, no login, loopback only. Do not expose the server to a network.
+- Tested on macOS with Chromium. Windows and other browsers were not tested.
+- Open questions for the sponsor: whether the transfer export records who confirmed a transfer, the timezone of confirmation times, and the intended meaning of "open since".
+
+## Credits
+
+- **Sponsor:** Siemens Digitalization and Data supplied the problem, data and feedback. Siemens data is confidential and is not in this repository.
+- **Team:** Texas A&M CSCE 482 capstone team. Repository collaborators: Daniel-Wu-Github, aryanvvemuri, amasud7, khhny. Earlier checkpoint work by aryanvvemuri (an ML depletion-forecasting pipeline and proactive alert engine) is preserved in the tags `code-check1`, `code-checkmvp`, `unit-testing-checkpoint` and `integration-testing-checkpoint`, and on the `ml-depletion-forecasting` branch. It is not part of the final code.
+- **Third-party software:** [openpyxl](https://openpyxl.readthedocs.io/) (MIT), [pytest](https://pytest.org/) (MIT), [Playwright for Python](https://playwright.dev/python/) (Apache-2.0). The interface uses no external fonts, libraries or images.
+
 ## Quick start (UAT build)
 
 **You need:** Python 3.11 or newer, and the files from the zip in one folder: `index.html`, `server.py`, `src/`, `requirements.txt`, `run.bat`, `run.sh`, this README, and `siemens_uat.sqlite3` (the database, in the same folder as this README).
