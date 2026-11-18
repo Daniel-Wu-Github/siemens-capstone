@@ -35,6 +35,7 @@ Failed deliveries are reported in the page and the activity log with the error t
 ## API
 
 - Core: `GET /api/datasets`, `GET /api/sources?dataset=`, `GET /api/stock?dataset=`
+  - `GET /api/stock` also returns, display only (additive, requested by the sponsor's logistics team on 2026-11-13): `positions[].last_replenished` (local ISO `YYYY-MM-DDTHH:MM`, the latest confirmed replenishment transfer for that position over all history, or null; the confirmation time zone is unconfirmed and the export is not known to say who performed the transfer), `open_alerts[].open_since` and `open_alerts[].open_hours` (age since the tool opened the alert, from `escalated_at` for below-minimum alerts that were predicted first; this is detection time, not the moment stock actually fell), and `as_of_server`. Email, Teams and webhook payloads are unchanged. The forecast never reads these fields.
 - Overrides & alerts: `POST /api/stock/available {dataset, position, available|null}`, `POST /api/stock/reset {dataset}`, `POST /api/stock/digest {dataset}`, `POST /api/stock/ack {id}`
 - Settings & presets: `POST /api/stock/settings {dataset, ...}`, `POST /api/stock/preview {dataset, ...}`, `GET /api/stock/presets?dataset=`, `POST /api/stock/presets {dataset, name, settings}`, `POST /api/stock/presets/delete {dataset, name}`, `POST /api/stock/lead-class {dataset, position, lead_class}`, `POST /api/stock/check {dataset}`
 - View 2: `GET /api/insights/parts?dataset=`, `GET /api/insights/parts.csv?dataset=`

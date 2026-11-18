@@ -101,7 +101,7 @@ table.pred .hb{width:84px}
 table.sources td:last-child{white-space:normal}
 table.pred th,table.pred td,table.stock th,table.stock td{padding-left:var(--s2);padding-right:var(--s2)}
 table.w2.stock td:first-child{max-width:170px}
-table.stock td.st{white-space:normal;min-width:96px}
+table.stock th{white-space:normal;vertical-align:bottom}table.stock th button{white-space:normal;text-align:inherit}table.stock td.st{white-space:normal;min-width:84px}
 table.stock td.act{white-space:normal;min-width:100px}
 table.stock td.act .btn{margin:0 0 var(--s1) var(--s1)}
 table.w2.parts td:nth-child(-n+2){min-width:110px;max-width:170px}
@@ -113,6 +113,7 @@ table.parts td.flags .tag{margin:0 var(--s1) var(--s1) 0;white-space:nowrap}
 
 #forecast-form{display:grid;grid-template-columns:1fr 1fr;gap:0 var(--s4)}#forecast-form p{grid-column:1/-1}
 .cols.table-first{grid-template-columns:minmax(0,1fr) 284px}
+@media(max-width:1400px){.cols.table-first{grid-template-columns:minmax(0,1fr)}}
 .strip.compact div{padding:var(--s2) var(--s3);min-width:120px}.strip.compact b{font-size:var(--t-lg)}
 .tools.prominent input:not([type]),.tools.prominent select{min-height:40px;font-size:var(--t-md)}
 .table-first table{font-size:var(--t-md)}.table-first td{height:44px}
@@ -121,6 +122,15 @@ table.parts td.flags .tag{margin:0 var(--s1) var(--s1) 0;white-space:nowrap}
 .pred-chart-card,.pred-calc-card{background:var(--surface);border:1px solid var(--line);margin-bottom:0;display:flex;flex-direction:column}
 .pred-chart-card>h2,.pred-calc-card>h2{margin:0;padding:var(--s2) var(--s3);font-size:var(--t-sm);font-weight:700;border-bottom:1px solid var(--line);display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:var(--s1);min-height:38px}
 .pred-chart-card .body,.pred-calc-card .body{padding:var(--s3);flex:1;display:flex;flex-direction:column}
+.panel h2.split{display:flex;justify-content:space-between;align-items:center;gap:var(--s2)}
+#digest-dialog{width:min(900px,92vw);max-height:80vh;padding:0;border:1px solid var(--line-strong);border-radius:var(--radius);background:var(--surface);color:var(--ink-2);box-shadow:var(--shadow-overlay);overflow:hidden}
+#digest-dialog[open]{display:flex;flex-direction:column}#digest-dialog::backdrop{background:rgba(22,32,42,.45)}
+#digest-dialog .dlg-head{display:flex;justify-content:space-between;align-items:center;gap:var(--s4);padding:var(--s3) var(--s4);border-bottom:1px solid var(--line)}
+#digest-dialog h2{margin:0;font-size:var(--t-lg);color:var(--brand)}#digest-dialog .dlg-sub{padding:var(--s2) var(--s4);font-size:var(--t-sm);color:var(--muted);border-bottom:1px solid var(--line)}
+#digest-dialog .dlg-body{padding:var(--s3) var(--s4) var(--s4);overflow:auto;font-size:var(--t-md)}#digest-dialog h3{margin:var(--s4) 0 var(--s2);font-size:var(--t-md);color:var(--dark)}
+.digest-rows{list-style:none;margin:0;padding:0;display:grid;gap:var(--s2)}.digest-rows li{border:1px solid var(--line);border-left:var(--s1) solid var(--line-strong);padding:var(--s2) var(--s3);display:flex;flex-wrap:wrap;gap:var(--s1) var(--s4)}
+.digest-rows li b{flex:1 1 100%;color:var(--dark)}.digest-rows li span{font-size:var(--t-sm);color:var(--ink-2)}
+.stock tr.alert-row td:first-child{border-left:var(--s1) solid var(--alert)}.nav-badge{display:inline-block;margin-left:var(--s2);min-width:var(--s5);padding:0 var(--s2);border-radius:var(--radius);background:var(--alert);color:#fff;font-size:var(--t-xs);font-weight:600;text-align:center;font-variant-numeric:tabular-nums}
 .pred-chart svg{display:block;width:100%;height:auto;max-height:300px}.chart-legend{display:flex;flex-wrap:wrap;gap:var(--s1) var(--s4);font-size:var(--t-xs);color:var(--ink-2);margin-top:var(--s2)}.chart-legend .sw{display:inline-block;width:12px;height:12px;margin-right:6px;vertical-align:-1px;border:1px solid var(--line-strong)}.chart-legend .sw.dot{border-radius:50%;border-width:2px}
 .pred-info{display:flex;flex-wrap:wrap;gap:var(--s2) var(--s4);padding:var(--s2) 0 0;border-top:1px solid var(--line);font-size:var(--t-sm);color:var(--ink-2);margin-top:auto}
 .pred-info dt{color:var(--muted);font-size:var(--t-xs)}.pred-info dd{margin:0;font-weight:600}
@@ -162,6 +172,15 @@ const $ = s => document.querySelector(s);
 const esc = v => String(v ?? '').replace(/[&<>"']/g, c => ({'&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'}[c]));
 const fmt = (n, d = 0) => n == null ? '—' : Number(n).toLocaleString('en-US', {maximumFractionDigits: d});
 const fmtHours = h => h == null ? '—' : `${fmt(h, h >= 100 ? 0 : 1)} h`;
+const fmtAge = h => {
+  if (h == null) return '—';
+  const m = Math.floor(h * 60);
+  if (m < 1) return '< 1 m';
+  if (h >= 24) return `${Math.floor(h / 24)} d ${Math.floor(h % 24)} h`;
+  if (h >= 1) return `${Math.floor(h)} h ${m % 60} m`;
+  return `${m} m`;
+};
+const fmtLastRepl = s => !s ? '—' : (s.slice(11, 16) && s.slice(11, 16) !== '00:00' ? `${s.slice(0, 10)} ${s.slice(11, 16)}` : s.slice(0, 10));
 const fmtWhen = s => s ? new Date(s).toLocaleString('en-US', {month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit', hour12: false}) : '—';
 const PAGES = [['stock', 'Stock alerts'], ['predicted', 'Predicted alerts'], ['insights', 'Replenishment insights']];
 const SETUP = [['data', 'Data sources'], ['settings', 'Settings']];
@@ -171,7 +190,7 @@ const PER = 50;
 let view = 'stock', datasets = [], ds = null, stock = null, stockFor = null, sources = null, sourcesFor = null;
 let busy = false, toastTimer, stockFilter = 'all', stockSearch = '', stockPage = 0;
 let predFilter = 'act', predSearch = '', predPage = 0, selected = null;
-let stockSort = {key: null, dir: 'asc'};
+let stockSort = {key: null, dir: 'asc'}, navLoading = false;
 let partsData = null, partsFor = null, partsFlags = [], partsShowAll = false, partsSearch = '', partsPage = 0, selectedPart = null;
 let partsThresholds = {refill_pct: 50, refills: 8, divergence: 50, min_refills: 3};
 let refNote = '';
@@ -219,7 +238,7 @@ async function loadStock(previewWindow) {
   }
   catch (e) { stock = {error: e.message}; }
   stockFor = requested;
-  if (view === 'stock' || view === 'predicted' || view === 'settings') render();
+  if (view === 'stock' || view === 'predicted' || view === 'settings') render(); else nav();
 }
 async function loadSources() {
   const requested = ds;
@@ -279,7 +298,11 @@ function invalidate() {
 
 /* ---------- shared pieces ---------- */
 function nav() {
-  const link = ([k, t]) => `<a href="#${k}"${k === view ? ' aria-current="page"' : ''}>${t}</a>`;
+  const openN = stock && stockFor === ds && !stock.error ? openBelowMin() : 0;
+  const link = ([k, t]) => k === 'stock' && openN > 0
+    ? `<a href="#${k}"${k === view ? ' aria-current="page"' : ''} aria-label="${t}, ${openN} open alert${openN === 1 ? '' : 's'}">${t}<span class="nav-badge" id="nav-alert-badge">${openN > 99 ? '99+' : openN}</span></a>`
+    : `<a href="#${k}"${k === view ? ' aria-current="page"' : ''}>${t}</a>`;
+  if (ds && stockFor !== ds && !navLoading && !['stock', 'predicted', 'settings'].includes(view)) { navLoading = true; loadStock().finally(() => { navLoading = false; }); }
   const fb = $('#open-feedback');
   $('#nav').innerHTML = `<div class="brand">Stock Alerts<small>Supermarket bins</small></div>${PAGES.map(link).join('')}<div class="grp">Setup</div>${SETUP.map(link).join('')}`;
   if (fb) $('#nav').appendChild(fb);
@@ -350,21 +373,27 @@ function stockRows() {
   const rows = d.positions.filter(p => (stockFilter === 'all' || (stockFilter === 'edited' ? p.overridden : stockFilter === 'OK' ? (p.status === 'OK' || p.status === 'Predicted') : p.status === stockFilter)) &&
       [p.material, p.description, p.supermarket, p.bin].join(' ').toLowerCase().includes(q))
     .sort((a, b) => {
-      const byDefault = order[a.status] - order[b.status] || a.supermarket.localeCompare(b.supermarket) || a.bin.localeCompare(b.bin);
+      const hrs = p => p.status === 'Alert' ? (openBy[p.key]?.open_hours ?? -1) : -1;
+      const byDefault = order[a.status] - order[b.status] || hrs(b) - hrs(a) || a.supermarket.localeCompare(b.supermarket) || a.bin.localeCompare(b.bin);
       if (!stockSort.key) return byDefault;
       const f = {material: p => ((p.description || p.material) + ' ' + p.material).toLowerCase(), location: p => (p.supermarket + ' ' + p.storage_type + ' ' + p.bin).toLowerCase(),
-        min: p => p.min ?? -1, max: p => p.max ?? -1, status: p => order[p.status]}[stockSort.key];
-      const x = f(a), y = f(b), c = typeof x === 'string' ? x.localeCompare(y) : x - y;
+        min: p => p.min ?? -1, max: p => p.max ?? -1, status: p => order[p.status], age: p => p.status === 'Alert' ? (openBy[p.key]?.open_hours ?? null) : null,
+        lastrepl: p => p.last_replenished || null}[stockSort.key];
+      const x = f(a), y = f(b);
+      if (x == null || y == null) return x == null && y == null ? byDefault : (x == null ? 1 : -1);
+      const c = typeof x === 'string' ? x.localeCompare(y) : x - y;
       return (stockSort.dir === 'desc' ? -c : c) || byDefault;
     });
   const pages = Math.max(1, Math.ceil(rows.length / PER)); stockPage = Math.min(stockPage, pages - 1);
   $('#stock-rows').innerHTML = rows.slice(stockPage * PER, stockPage * PER + PER).map(p => {
     const a = openBy[p.key], [tc, tt] = p.status === 'Alert' ? ['alert', 'Alert'] : p.status === 'OK' ? ['ok', 'OK'] : p.status === 'Predicted' ? ['ok', 'OK'] : ['none', p.status];
-    return `<tr><td>${esc(p.description || p.material)}<small>${esc(p.material)}</small></td><td>${esc(p.supermarket)}<small>${esc(p.storage_type)} / ${esc(p.bin)}</small></td>
+    return `<tr${p.status === 'Alert' ? ' class="alert-row"' : ''}><td>${esc(p.description || p.material)}<small>${esc(p.material)}</small></td><td>${esc(p.supermarket)}<small>${esc(p.storage_type)} / ${esc(p.bin)}</small></td>
 <td class="r"><input class="cell${p.overridden ? ' edited' : ''}" type="number" min="0" step="1" value="${p.available ?? ''}" data-stock-pos="${esc(p.key)}" aria-label="Available stock for ${esc(p.material)} ${esc(p.bin)}">${p.overridden ? `<small>source ${fmt(p.source_available)}</small>` : ''}</td>
-<td class="r">${fmt(p.min)}</td><td class="r">${fmt(p.max)}${p.note ? `<small>${esc(p.note)}</small>` : ''}</td><td class="st">${tag(tc, tt)}${a ? `<small>${esc(a.status)} since ${esc(fmtWhen(a.created_at))}</small>` : ''}</td>
+<td class="r">${fmt(p.min)}</td><td class="r">${fmt(p.max)}${p.note ? `<small>${esc(p.note)}</small>` : ''}</td><td class="st">${tag(tc, tt)}${a && a.status === 'Acknowledged' ? '<small>Acknowledged</small>' : ''}</td>
+<td class="r num"${p.status === 'Alert' && a ? ` title="Open in this tool since ${esc(fmtWhen(a.open_since))}"` : ''}>${p.status === 'Alert' && a ? esc(fmtAge(a.open_hours)) : '—'}</td>
+<td class="r num"${p.last_replenished ? '' : ' title="No replenishment on file"'}>${esc(fmtLastRepl(p.last_replenished))}</td>
 <td class="act"><button class="btn small" data-stock-set="${esc(p.key)}">Set</button>${p.overridden ? `<button class="btn small" data-stock-clear="${esc(p.key)}">Reset</button>` : ''}${a && a.status === 'Open' ? `<button class="btn small" data-stock-ack="${esc(a.id)}">Acknowledge</button>` : ''}</td></tr>`;
-  }).join('') || '<tr><td colspan="7" class="empty">No positions match.</td></tr>';
+  }).join('') || '<tr><td colspan="9" class="empty">No positions match.</td></tr>';
   $('#stock-count').textContent = `${fmt(rows.length)} matching positions · page ${stockPage + 1} of ${pages}`;
   $('#stock-prev').disabled = stockPage === 0; $('#stock-next').disabled = stockPage >= pages - 1;
 }
@@ -372,6 +401,27 @@ function failedBanner(last) {
   const bad = last ? last.results.filter(r => r.status === 'failed') : [];
   if (!bad.length) return '';
   return `<div class="fail-banner" id="delivery-failed" role="alert"><b>Last notification not delivered:</b> ${bad.map(r => esc(r.channel + ' failed' + (r.detail ? ' (' + r.detail + ')' : ''))).join('; ')}. Failed deliveries are not retried automatically. Fix the channel under Delivery, then use Send digest to resend all open alerts.</div>`;
+}
+function digestBodyHtml(text) {
+  // Groups the plain-text notification into sections and readable rows. Display only; the text itself is unchanged.
+  const out = []; let open = false;
+  for (const line of String(text || '').split('\n')) {
+    if (line.startsWith('- ')) {
+      const [head, ...rest] = line.slice(2).split(' · ');
+      out.push(`<li><b>${esc(head)}</b>${rest.length ? `<span>${rest.map(esc).join('</span><span>')}</span>` : ''}</li>`);
+    } else {
+      if (open) { out.push('</ul>'); open = false; }
+      if (!line.trim()) continue;
+      if (line.endsWith(':') && !line.includes(' · ')) { out.push(`<h3>${esc(line.slice(0, -1))}</h3><ul class="digest-rows">`); open = true; }
+      else out.push(`<p>${esc(line)}</p>`);
+    }
+  }
+  if (open) out.push('</ul>');
+  return out.join('');
+}
+function digestDialogHtml(last) {
+  return `<dialog id="digest-dialog" aria-labelledby="digest-title"><div class="dlg-head"><h2 id="digest-title">${esc(last.subject)}</h2><button type="button" class="btn small" id="digest-close">Close</button></div>
+<div class="dlg-sub">${esc(fmtWhen(last.created_at))} · ${last.results.map(r => esc(r.channel + ': ' + r.status)).join(' · ')}</div><div class="dlg-body">${digestBodyHtml(last.text)}</div></dialog>`;
 }
 function stockPageHtml() {
   const title = TITLES.stock;
@@ -387,10 +437,10 @@ function stockPageHtml() {
     (d.tolerances_loaded ? '' : '<div class="legacy-banner">Min/Max tolerances not imported. Add the Min/Max file under Data sources to evaluate alerts.</div>') +
     strip([[fmt(sm.alerts), 'Open alerts', 'stock-alert-count'], [fmt(empty), 'Empty bins, minimum 0'], [fmt(sm.positions), 'Positions checked'], [fmt(sm.overridden), 'Simulated edits']], 'compact') +
     `<div class="cols table-first"><section class="panel"><div class="tools prominent"><input id="stock-search" placeholder="Search material, description, supermarket or bin" value="${esc(stockSearch)}" aria-label="Search stock positions"><select id="stock-filter" aria-label="Stock alert filter"><option value="all">All positions</option><option value="Alert">Alerts</option><option value="OK">OK</option><option value="edited">Simulated edits</option></select></div>
-<div class="tw"><table class="w2 stock"><thead id="stock-head"><tr>${sortTh('material', 'Material')}${sortTh('location', 'Location')}<th class="r">Available${sortTh('min', 'Min', 'r')}${sortTh('max', 'Max', 'r')}${sortTh('status', 'Status')}<th></th></tr></thead><tbody id="stock-rows"></tbody></table></div>
+<div class="tw"><table class="w2 stock"><thead id="stock-head"><tr>${sortTh('material', 'Material')}${sortTh('location', 'Location')}<th class="r">Available${sortTh('min', 'Min', 'r')}${sortTh('max', 'Max', 'r')}${sortTh('status', 'Status')}${sortTh('age', 'Open since', 'r')}${sortTh('lastrepl', 'Last replenished', 'r')}<th></th></tr></thead><tbody id="stock-rows"></tbody></table></div>
 <div class="foot"><span id="stock-count"></span><span><button class="btn small" id="stock-prev">Previous</button> <button class="btn small" id="stock-next">Next</button></span></div></section>
 <div><section class="panel"><h2>Delivery</h2><div class="body"><dl class="kv"><dt>Email<dd>${chan}<dt>Teams<dd>${ch.teams.configured ? 'Connected' : 'Not configured'}<dt>Webhook<dd>${ch.webhook.configured ? 'Connected' : 'Not configured'}</dl><div class="note">Every change is sent once, with only the changes. Edit Available to simulate a reading; source files never change.</div></div></section>
-${last ? `<section class="panel"><h2>Last notification</h2><div class="body"><b>${esc(last.subject)}</b><div class="note">${esc(fmtWhen(last.created_at))} · ${last.results.map(r => esc(r.channel + ': ' + r.status)).join(' · ')}</div><pre class="mail" id="mail-preview">${esc(last.text)}</pre></div></section>` : ''}</div></div>`;
+${last ? `<section class="panel"><h2 class="split">Last notification <button type="button" class="btn small" id="enlarge-digest" aria-haspopup="dialog">Enlarge</button></h2><div class="body"><b>${esc(last.subject)}</b><div class="note">${esc(fmtWhen(last.created_at))} · ${last.results.map(r => esc(r.channel + ': ' + r.status)).join(' · ')}</div><pre class="mail" id="mail-preview">${esc(last.text)}</pre></div></section>${digestDialogHtml(last)}` : ''}</div></div>`;
 }
 async function stockPost(path, body) {
   await guarded(async () => {
@@ -414,10 +464,17 @@ function bindStock() {
   $('#stock-head').addEventListener('click', e => {
     const b = e.target.closest('button[data-sort]'); if (!b) return;
     const k = b.dataset.sort;
-    stockSort = stockSort.key === k ? (stockSort.dir === 'asc' ? {key: k, dir: 'desc'} : {key: null, dir: 'asc'}) : {key: k, dir: 'asc'};
+    const first = k === 'age' ? 'desc' : 'asc', second = first === 'asc' ? 'desc' : 'asc';  // age starts longest-open first
+    stockSort = stockSort.key === k ? (stockSort.dir === first ? {key: k, dir: second} : {key: null, dir: 'asc'}) : {key: k, dir: first};
     stockPage = 0; render();
     $('#stock-head [data-sort="' + k + '"]')?.focus();
   });
+  const dlg = $('#digest-dialog');
+  if (dlg) {
+    $('#enlarge-digest').addEventListener('click', () => dlg.showModal());
+    $('#digest-close').addEventListener('click', () => dlg.close());
+    dlg.addEventListener('click', e => { if (e.target === dlg) dlg.close(); });   // click on the backdrop
+  }
   $('#stock-search').addEventListener('input', e => { stockSearch = e.target.value; stockPage = 0; stockRows(); });
   $('#stock-filter').addEventListener('change', e => { stockFilter = e.target.value; stockPage = 0; stockRows(); });
   $('#stock-prev').addEventListener('click', () => { stockPage--; stockRows(); });
@@ -456,8 +513,6 @@ function projection(p, tick, watchHours) {
   const emptyIn = emptyH != null && emptyH <= scale, hitIn = hitH != null && hitH > 0 && hitH <= scale;
   const endV = Math.max(0, avail - rate * scale);
   const lineEnd = emptyIn ? [x(emptyH), y(0)] : [x(scale), y(endV)];
-  const flip = h => x(h) > x1 - 200;
-  const lab = (h, ty, t1, t2) => `<text x="${x(h) + (flip(h) ? -14 : 14)}" y="${ty}" text-anchor="${flip(h) ? 'end' : 'start'}" font-size="14" font-weight="700" fill="var(--alert)">${t1}</text><text x="${x(h) + (flip(h) ? -14 : 14)}" y="${ty + 16}" text-anchor="${flip(h) ? 'end' : 'start'}" font-size="12" fill="var(--ink-2)">${t2}</text>`;
   const label = hitH === 0 ? 'Projected stock, already at or below the minimum' : `Projected stock reaches the minimum in ${fmtHours(hitH)}${emptyIn ? ` and is empty in ${fmtHours(emptyH)}` : ''}`;
   return `<svg viewBox="0 0 ${W} ${H}" width="100%" role="img" aria-label="${label}">
 <rect x="${x0}" y="${y0}" width="${x1 - x0}" height="${Math.max(0, y(mn) - y0)}" fill="var(--ok-wash)"/>
@@ -469,9 +524,8 @@ function projection(p, tick, watchHours) {
 <text x="${x0 - 8}" y="${y(avail) + 5}" text-anchor="end" font-size="13" font-weight="700" fill="var(--dark)">${fmt(avail)}</text><text x="${x0 - 8}" y="${y1 + 5}" text-anchor="end" font-size="13">0</text>
 ${ticks.map(h => `<line x1="${x(h)}" x2="${x(h)}" y1="${y1}" y2="${y1 + 6}" stroke="var(--line-strong)"/><text x="${x(h)}" y="${y1 + 22}" text-anchor="middle" font-size="13">${h === 0 ? 'now' : '+' + h + ' h'}</text>`).join('')}
 ${hitH === 0 ? `<text x="${x0 + 12}" y="${y0 + 18}" font-size="14" font-weight="700" fill="var(--alert)">Already at or below the minimum</text>` : ''}
-${hitIn ? `<circle cx="${x(hitH)}" cy="${y(mn)}" r="7" fill="#fff" stroke="var(--alert)" stroke-width="3"/>${lab(hitH, y(mn) - 42, 'Hits minimum in ' + fmtHours(hitH), 'projected ' + fmt(mn) + ' pcs')}` : ''}
-${emptyIn ? `<circle cx="${x(emptyH)}" cy="${y(0)}" r="7" fill="var(--alert)"/>${lab(emptyH, y(0) - 62, 'Empty in ' + fmtHours(emptyH), 'projected 0 pcs')}` : ''}
-${!emptyIn && emptyH != null ? `<text x="${x1}" y="${y1 - 10}" text-anchor="end" font-size="13" fill="var(--ink-2)">Empty in ${fmtHours(emptyH)} (past the end of this chart)</text>` : ''}
+${hitIn ? `<circle cx="${x(hitH)}" cy="${y(mn)}" r="7" fill="#fff" stroke="var(--alert)" stroke-width="3"/>` : ''}
+${emptyIn ? `<circle cx="${x(emptyH)}" cy="${y(0)}" r="7" fill="var(--alert)"/>` : ''}
 <circle cx="${x0}" cy="${y(avail)}" r="7" fill="var(--brand)" stroke="var(--dark)" stroke-width="3"/>
 </svg>
 <div class="chart-legend"><span><i class="sw" style="background:var(--dark)"></i>Projected stock (straight line = average pace)</span><span><i class="sw" style="background:var(--ok-wash)"></i>Above minimum</span><span><i class="sw" style="background:var(--alert-wash)"></i>Below minimum</span><span><i class="sw dot" style="background:var(--brand);border-color:var(--dark)"></i>Now</span><span><i class="sw dot" style="background:#fff;border-color:var(--alert)"></i>Hits minimum</span><span><i class="sw dot" style="background:var(--alert);border-color:var(--alert)"></i>Empty</span></div>`;
@@ -522,6 +576,8 @@ function predPageHtml() {
               <dl class="kv" style="display:flex;flex-wrap:wrap;gap:var(--s2) var(--s4);margin:0;width:100%">
                 <div><dt>Tier</dt><dd>${tierOf(sel)[1]}</dd></div>
                 <div><dt>Hours to min</dt><dd>${fmtHours(sel.hours_to_min)}</dd></div>
+                ${sel.demand_per_day ? `<div><dt>Hits minimum in</dt><dd>${fmtHours(sel.hours_to_min)}<small class="note"> · projected ${fmt(sel.min)} pcs</small></dd></div>
+                <div><dt>Empty in</dt><dd>${fmtHours(sel.available / (sel.demand_per_day / 24))}<small class="note"> · projected 0 pcs</small></dd></div>` : ''}
                 <div><dt>Demand / day</dt><dd>${sel.demand_per_day == null ? '—' : fmt(sel.demand_per_day, 2)}</dd></div>
                 <div><dt>Suggested qty</dt><dd>${sel.suggested_qty == null ? '—' : fmt(sel.suggested_qty)}</dd></div>
                 <div><dt>Lead class</dt><dd><select class="cell" data-lead-pos="${esc(sel.key)}" aria-label="Lead class for ${esc(sel.material)} ${esc(sel.bin)}"><option value="stocked"${sel.lead_class === 'stocked' ? ' selected' : ''}>stocked</option><option value="fab"${sel.lead_class === 'fab' ? ' selected' : ''}>fab</option></select></dd></div>

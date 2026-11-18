@@ -212,6 +212,9 @@ class Store:
         if inventory is None:
             inventory = self._insights(db, dataset_id, window_days_override=window if window != 30 else None)['inventory']
         proactive.project(items, inventory, settings, lead_classes)
+        last = {proactive.position_key(r.get('material'), r.get('storage_type'), r.get('bin')): r.get('last_replenished') for r in inventory or []}
+        for p in items:  # display only: the forecast never reads this
+            p['last_replenished'] = last.get(proactive.position_key(p['material'], p['storage_type'], p['bin']))
         return items, as_of, refs['tolerances'] is not None
 
     def _settings(self, db, dataset_id):
@@ -294,6 +297,11 @@ class Store:
             items, as_of, has_tol = self._stock_positions(db, dataset_id, settings=settings)
             open_alerts = self._open_stock_alerts(db, dataset_id)
             notes = [json.loads(r['payload']) for r in db.execute('SELECT payload FROM notifications WHERE dataset=? ORDER BY rowid DESC LIMIT 5', (dataset_id,))]
+        as_of_server = now()
+        for a in open_alerts:  # display only; email, Teams and webhook payloads are built elsewhere and stay unchanged
+            start = (a.get('escalated_at') if a.get('kind', 'below_min') == 'below_min' else None) or a['created_at']
+            a['open_since'] = start
+            a['open_hours'] = round(max(0.0, (datetime.fromisoformat(as_of_server) - datetime.fromisoformat(start)).total_seconds() / 3600), 2)
         counts = dict(predicted=0, watch=0, below_min=0, no_rate=0, ok=0)
         for p in items:
             key = {'within_lead': 'predicted'}.get(p['forecast'], p['forecast'])
@@ -303,7 +311,7 @@ class Store:
                                  ok=sum(p['status'] == 'OK' for p in items), no_tolerance=sum(p['status'] == 'No tolerance' for p in items),
                                  overridden=sum(p['overridden'] for p in items)),
                     forecast=dict(settings=settings, summary=counts, saved_rate_window_days=saved.get('rate_window_days', 30)),
-                    open_alerts=open_alerts, notifications=notes, channels=stock_alerts.public_config(self.alert_config), notification=None)
+                    as_of_server=as_of_server, open_alerts=open_alerts, notifications=notes, channels=stock_alerts.public_config(self.alert_config), notification=None)
 
     def set_available(self, dataset_id, position, available):
         """Simulate a stock reading for one position. Source files and imported rows are never changed."""

@@ -309,7 +309,7 @@ def test_supermarket_names(code, name):
 
 def test_analysis_version_and_horizon_defaults():
     a = analysis([bin_row('P1', 'A1', 5)])
-    assert analytics.ANALYSIS_VERSION == '2.2-window' and a['version'] == '2.2-window' and a['horizon_default_hours'] == 8
+    assert analytics.ANALYSIS_VERSION == '2.3-last-replenished' and a['version'] == '2.3-last-replenished' and a['horizon_default_hours'] == 8
 
 
 def test_category_counts_only_replenishment_feeds_rate():

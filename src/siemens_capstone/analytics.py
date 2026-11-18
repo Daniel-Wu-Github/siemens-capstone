@@ -12,7 +12,7 @@ from statistics import median
 
 from .ingest import excel_datetime, identifier
 
-ANALYSIS_VERSION = '2.2-window'
+ANALYSIS_VERSION = '2.3-last-replenished'
 
 
 def numeric(value):
@@ -163,7 +163,7 @@ def analyze(records, date_system='1900', references=None, window_days_override=N
                                   name=label(row.get('Material Description')) or key[0], storage_type=key[1], bin=key[2],
                                   supermarket=supermarket(key[1]) if key[1] else '',
                                   unit=key[3], stock=0, source_rows=0, invalid_stock_rows=0,
-                                  window_transfer_quantity=0, window_transfer_events=0, window_refills=[],
+                                  window_transfer_quantity=0, window_transfer_events=0, window_refills=[], last_replenished=None,
                                   target_quantity_per_day=None, stock_to_target_days=None)
         position = positions[key]; position['source_rows'] += 1
         stock = numeric(row.get('Available stock'))
@@ -197,6 +197,11 @@ def analyze(records, date_system='1900', references=None, window_days_override=N
     window_events = 0
     for event in replen:
         weekly[monday(event['confirmed'].date())] += 1
+        last_candidates = lookup[(event['material'], event['bin'])]  # all-history pass, display only; same unique-match rule as below
+        if event['storage_type']:
+            last_candidates = [p for p in last_candidates if p['storage_type'] == event['storage_type']]
+        if len(last_candidates) == 1 and (last_candidates[0]['last_replenished'] is None or event['confirmed'] > last_candidates[0]['last_replenished']):
+            last_candidates[0]['last_replenished'] = event['confirmed']
         if event['confirmed'].date() < cutoff: continue
         window_events += 1
         frequent[event['material']] += 1
@@ -282,6 +287,7 @@ def analyze(records, date_system='1900', references=None, window_days_override=N
     for p in positions.values():
         p['window_days'] = window_days
         p['window_refills'].sort(key=lambda refill: refill['date'])
+        if p['last_replenished'] is not None: p['last_replenished'] = p['last_replenished'].isoformat(timespec='minutes')
         if p['window_transfer_events'] and p['unit'] in ('PC', 'EA') and window_days:
             rate = p['window_transfer_quantity']/window_days
             p['target_quantity_per_day'] = rate

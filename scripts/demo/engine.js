@@ -106,8 +106,8 @@ let settings, overrides, leadClasses, alerts, notifications, activity, presets, 
 function reset() {
   settings = clone(DEFAULT_SETTINGS); overrides = {}; leadClasses = {}; alerts = []; notifications = []; presets = clone(DATA.presets); feedbacks = []; seq = 0;
   activity = clone(DATA.sources.activity);
-  const t = nowIso(); sync(positions());  // the starting workspace already has its alerts open
-  for (const a of alerts) a.created_at = t;
+  sync(positions());  // the starting workspace already has its alerts open
+  alerts.forEach((a, i) => { a.created_at = new Date(Date.now() - (i * 7 + 1.5) * 36e5).toISOString(); });  // staggered so the Open since column shows different ages
 }
 function evaluated() {
   return base.map(b => {
@@ -174,10 +174,15 @@ function stockView(windowOverride) {
   const s = windowOverride != null ? {...settings, rate_window_days: windowOverride} : settings;
   const items = positions(s), counts = {predicted: 0, watch: 0, below_min: 0, no_rate: 0, ok: 0};
   for (const p of items) { const k = p.forecast === 'within_lead' ? 'predicted' : p.forecast; if (k in counts) counts[k]++; }
-  return {dataset_id: DATA.dataset_id, snapshot_as_of: null, tolerances_loaded: true, positions: items,
+  const asOfServer = nowIso();
+  const aged = openAlerts().map(a => {  // mirrors Store.stock_view: age runs from escalated_at for below-min alerts, else created_at
+    const start = ((a.kind || 'below_min') === 'below_min' && a.escalated_at) || a.created_at;
+    return {...a, open_since: start, open_hours: Math.round(Math.max(0, (Date.parse(asOfServer) - Date.parse(start)) / 36e5) * 100) / 100};
+  });
+  return {dataset_id: DATA.dataset_id, snapshot_as_of: null, tolerances_loaded: true, positions: items, as_of_server: asOfServer,
     summary: {positions: items.length, alerts: items.filter(p => p.status === 'Alert').length, ok: items.filter(p => p.status === 'OK').length,
       no_tolerance: items.filter(p => p.status === 'No tolerance').length, overridden: items.filter(p => p.overridden).length},
-    forecast: {settings: clone(s), summary: counts, saved_rate_window_days: settings.rate_window_days || 30}, open_alerts: openAlerts(), notifications: clone(notifications),
+    forecast: {settings: clone(s), summary: counts, saved_rate_window_days: settings.rate_window_days || 30}, open_alerts: aged, notifications: clone(notifications),
     channels: clone(DATA.stock.channels), notification: null};
 }
 function median(a) { const s = [...a].sort((x, y) => x - y), m = s.length >> 1; return s.length % 2 ? s[m] : (s[m - 1] + s[m]) / 2; }

@@ -205,8 +205,12 @@ def test_predicted_chart_is_full_width(tmp_path, clean_env):
         assert viewbox.startswith('0 0 760'), f'Expected labelled chart, got viewBox={viewbox}'
         page.locator('#pred-rows tr[data-pred]', has_text='Predicted').first.click()
         chart = page.locator('#pred-chart svg')
-        expect(chart.locator('text', has_text='Hits minimum in')).to_have_count(1)
-        expect(chart.locator('text', has_text='Empty in')).to_have_count(1)
+        expect(chart.locator('text', has_text='Hits minimum in')).to_have_count(0)
+        expect(chart.locator('text', has_text='Empty in')).to_have_count(0)
+        info = page.locator('#pred-chart .pred-info')
+        expect(info.locator('dt', has_text='Hits minimum in')).to_have_count(1)
+        expect(info.locator('dt', has_text='Empty in')).to_have_count(1)
+        expect(info).to_contain_text('projected 0 pcs')
         expect(page.locator('#pred-chart .chart-legend')).to_have_count(1)
         assert page.locator('.cols.table-first').count() == 0
         assert not errors

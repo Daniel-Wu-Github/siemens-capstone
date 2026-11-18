@@ -91,6 +91,7 @@ def compare_views(js, py):
         for field in ('status', 'forecast', 'available', 'min', 'max', 'lead_class', 'lead_hours', 'demand_basis', 'demand_dropped', 'overridden', 'suggested_qty', 'no_rate_reason'):
             assert q.get(field) == p.get(field), (key, field, q.get(field), p.get(field))
         assert close(q['hours_to_min'], p['hours_to_min']) and close(q['demand_per_day'], p['demand_per_day']), key
+        assert q.get('last_replenished') == p.get('last_replenished'), key   # display-only field; open_since/open_hours are clock-based and not compared
     alerts = lambda v: sorted((x['position'], x['kind'], x['status']) for x in v['open_alerts'])
     assert alerts(js) == alerts(py)
 
@@ -193,7 +194,7 @@ def test_opens_on_the_guide_with_screenshots_and_every_task(demo):
         expect(page.get_by_role('heading', name='Testing guide', exact=True)).to_be_visible()
         expect(page).to_have_url(re.compile(r'demo\.html$'))
         expect(page.locator('.demo-ribbon')).to_contain_text('nothing is saved or sent')
-        assert page.locator('#nav a').all_inner_texts() == ['Stock alerts', 'Predicted alerts', 'Replenishment insights', 'Data sources', 'Settings', 'Testing guide']
+        assert page.evaluate("[...document.querySelectorAll('#nav a')].map(a => a.firstChild.textContent)") == ['Stock alerts', 'Predicted alerts', 'Replenishment insights', 'Data sources', 'Settings', 'Testing guide']
         expect(page.locator('#nav a[aria-current="page"]')).to_have_text('Testing guide')
         assert page.locator('.guide-task').count() == 8
         for n in range(1, 9):
@@ -230,6 +231,12 @@ def test_stock_alerts_in_the_demo(demo):
         s = Page(p, demo['url'] + '#stock'); page = s.page
         expect(rows(page, '#stock-rows').first).to_be_visible()
         expect(page.locator('#stock-count')).to_contain_text('114 matching positions · page 1 of 3')
+        expect(page.locator('#nav-alert-badge')).to_have_text(str(demo['data']['stock']['summary']['alerts']))
+        assert page.locator('#stock-rows tr.alert-row').count() >= 1
+        ages = page.evaluate("[...document.querySelectorAll('#stock-rows tr.alert-row')].map(r => r.children[6].innerText)")
+        assert all(re.match(r'^(\d+ d \d+ h|\d+ h \d+ m|\d+ m|< 1 m)$', a) for a in ages), ages
+        hours = lambda a: (int(a.split(' d ')[0]) * 24 + int(a.split(' d ')[1].split(' h')[0])) if ' d ' in a else int(a.split(' h')[0]) if ' h ' in a else 0
+        assert [hours(a) for a in ages] == sorted((hours(a) for a in ages), reverse=True), ages   # longest open first
         page.locator('#stock-search').fill(facts['searchWord'])
         assert 0 < rows(page, '#stock-rows').count() < 50
         page.locator('#stock-search').fill('')

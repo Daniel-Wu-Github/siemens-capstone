@@ -186,7 +186,7 @@ def test_stock_alerts_every_control(tmp_path):
         # Acknowledge the open alert.
         bm = rows(page, '#stock-rows').filter(has_text='BBM')
         bm.get_by_role('button', name='Acknowledge').click()
-        expect(bm).to_contain_text('Acknowledged since')
+        expect(bm).to_contain_text('Acknowledged')
         expect(bm.get_by_role('button', name='Acknowledge')).to_have_count(0)
 
         # Invalid entry is rejected locally. FAR and SAFE sort onto page 2, so narrow the list first.

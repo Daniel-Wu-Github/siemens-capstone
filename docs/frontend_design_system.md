@@ -30,12 +30,14 @@ Contrast: muted text on white is 5.9:1, accent on white 5.3:1, tier colours on t
 
 ## 5. Graphics (functional only)
 1. **Hours-to-minimum bar** (table cell): 0 to 72 h, filled by tier colour, black tick at lead + safety.
-2. **Projection line** (detail panel): stock falling to the minimum line, shaded lead + safety window.
+2. **Projection line** (Predicted alerts chart card; approved 2026-11-17): straight-line stock from now. Green wash above the minimum, red wash below it (`--ok-wash`, `--alert-wash`), dashed minimum line, teal (`--brand`) now dot with a dark outline, hollow red dot labelled "Hits minimum in N h", solid red dot labelled "Empty in N h", axis in hours from now (the snapshot has no time of day), legend underneath. No uncertainty band.
 3. **Refill dots** (table) and **refill bars** (detail): height of each refill as a share of Max, dashed line at Max.
 No donuts, no gauges, no decorative shapes or icons.
 
 ## 6. Component inventory
 Nav item, Button (default, primary), Status tag, Status strip, Table (sticky header, right-aligned tabular numbers, selected row), Toolbar (search plus select), Panel, Key-value list, Step list (formula steps), Hours bar, Projection chart, Refill chart, Notice banner, Note text. A new component needs a row here first.
+
+Added 2026-11-17 (Daniel Wu approved): **Alert row marker** (4 px `--alert` left border on the first cell of Alert rows, no row fill, the Alert tag stays), **Nav count badge** (`--alert` pill with white number on the Stock alerts item; counts unacknowledged below-minimum alerts; hidden at 0; `aria-label` carries the count), **Age cell** (`Open since`, formatted by `fmtAge`; Alert tier sorts longest open first by default), **Last replenished column** (date from the confirmed replenishment transfers), **Dialog** (native `<dialog>`, 900 px max, the one overlay shadow, Esc and Close, used for the enlarged digest).
 
 ## 7. Rules
 Tokens only, no raw hex or px in component CSS. Every number goes through one formatter. Names never truncate mid-word. Targets at least 24 px, contrast 4.5:1. Never convey a tier by colour alone. Anti-patterns to avoid here: identical shadowed cards, big number plus tiny label tiles, all-caps eyebrows, decorative icons, motion on hover.
