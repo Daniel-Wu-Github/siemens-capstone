@@ -79,26 +79,43 @@ To run the tests: `python -m playwright install chromium`, then `python -m pytes
 - **Team:** Texas A&M CSCE 482 capstone team. Repository collaborators: Daniel-Wu-Github, aryanvvemuri, amasud7, khhny. Earlier checkpoint work by aryanvvemuri (an ML depletion-forecasting pipeline and proactive alert engine) is preserved in the tags `code-check1`, `code-checkmvp`, `unit-testing-checkpoint` and `integration-testing-checkpoint`, and on the `ml-depletion-forecasting` branch. It is not part of the final code.
 - **Third-party software:** [openpyxl](https://openpyxl.readthedocs.io/) (MIT), [pytest](https://pytest.org/) (MIT), [Playwright for Python](https://playwright.dev/python/) (Apache-2.0). The interface uses no external fonts, libraries or images.
 
-## Quick start (UAT build)
+## Quick start
 
-**You need:** Python 3.11 or newer, and the files from the zip in one folder: `index.html`, `server.py`, `src/`, `requirements.txt`, `run.bat`, `run.sh`, this README, and `siemens_uat.sqlite3` (the database, in the same folder as this README).
+Two ways to start. **Option A is the one to use** when you have the handoff zip; Option B is for rebuilding the database from the Siemens files.
 
-**Start it**
+### Option A (preferred): start from the handoff database
 
-- **Windows:** double-click `run.bat`.
-- **Mac / Linux:** open a terminal in this folder and run `sh run.sh`.
+You need Python 3.11 or newer.
 
-The first start creates a private `.venv` folder and installs one package (`openpyxl`), which needs internet access or an internal pip mirror. Later starts take a few seconds. Your browser opens **http://127.0.0.1:8765**. Keep the black window open while testing; close it, or press Ctrl+C, to stop. Your edits are kept in the database file.
+1. Unzip `siemens-capstone-handoff.zip`.
+2. Open a terminal in the unzipped folder.
+3. Run `sh run.sh siemens_capstone.sqlite3` (Windows: `run.bat siemens_capstone.sqlite3`).
+4. Open http://127.0.0.1:8765.
+
+The zip's database already holds the workbook, the Min/Max file, the BOM and the alert history, so there is nothing to import. The first start creates a private `.venv` folder and installs one package (`openpyxl`), which needs internet access or an internal pip mirror. Keep the black window open while testing; close it, or press Ctrl+C, to stop. Your edits are kept in `siemens_capstone.sqlite3`.
+
+### Option B: rebuild the database from the Siemens files
+
+Use this to see the import steps, or to start from the raw files. You need Python 3.11 or newer and the Siemens files: the manufacturing workbook (`Prod_Capstone_Data.xlsx`), the Min/Max file and the BOM. Put them in `data/`. The daily bin-status files are optional.
+
+1. Import and build the database (creates `data/new.sqlite3`):
+   ```
+   python server.py --db data/new.sqlite3 --import-workbook data/Prod_Capstone_Data.xlsx \
+       --attach data/Min_Max-SM.xlsx --attach data/BOMEXAMPLE.xlsx --quiet --no-serve
+   ```
+2. Start the app: `python server.py --db data/new.sqlite3`, then open http://127.0.0.1:8765.
+
+Full steps, optional daily files and the browser upload route: [docs/INSTALL_GUIDE.md](docs/INSTALL_GUIDE.md) (section 4) and [docs/DATA_IMPORT_GUIDE.md](docs/DATA_IMPORT_GUIDE.md).
 
 **Options** (both scripts take the same two optional arguments):
 
 ```
-run.bat                              database siemens_uat.sqlite3 in this folder, port 8765
-run.bat my_copy.sqlite3              a different database file
-run.bat siemens_uat.sqlite3 8766     a different port
+run.bat                                   database siemens_capstone.sqlite3 in this folder, port 8765
+run.bat my_copy.sqlite3                   a different database file
+run.bat siemens_capstone.sqlite3 8766     a different port
 ```
 
-If a script cannot be used, run it by hand after `python -m venv .venv` and `pip install -r requirements.txt` (use `.venv\Scripts\python` on Windows, `.venv/bin/python` elsewhere): `python server.py --db siemens_uat.sqlite3`.
+If a script cannot be used, run it by hand after `python -m venv .venv` and `pip install -r requirements.txt` (use `.venv\Scripts\python` on Windows, `.venv/bin/python` elsewhere): `python server.py --db siemens_capstone.sqlite3`.
 
 **Five-minute tour** (left menu)
 
@@ -128,8 +145,8 @@ If a script cannot be used, run it by hand after `python -m venv .venv` and `pip
 
 - **"Python was not found":** install Python 3.11+ from python.org (tick "Add to PATH"), or ask IT for a managed install.
 - **pip cannot download:** point pip at your internal mirror (`pip config set global.index-url ...`) or send the error to the team.
-- **"Cannot listen on port 8765":** another program uses it. Start with another port: `run.bat siemens_uat.sqlite3 8766`.
-- **"Database not found":** put `siemens_uat.sqlite3` next to `run.bat`, or pass its path as the first argument. The script never creates an empty one.
+- **"Cannot listen on port 8765":** another program uses it. Start with another port: `run.bat siemens_capstone.sqlite3 8766`.
+- **"Database not found":** put `siemens_capstone.sqlite3` next to `run.bat`, or pass its path as the first argument. The script never creates an empty one.
 - **Blank page or "unavailable":** the black window must still be open; reload the page.
 
 ## Optional: real email, Teams or webhook delivery
@@ -144,5 +161,5 @@ Set environment variables before starting (they are read at start-up): `SMTP_HOS
 - Build a workspace from source files: `python server.py --db new.sqlite3 --import-workbook data/Prod_Capstone_Data.xlsx --attach data/Min_Max-SM.xlsx --attach data/BOMEXAMPLE.xlsx --attach Bin_Status_2026-10-22.xlsx --quiet --no-serve`.
 - Offline demand-rate backtest: `python scripts/backtest_rates.py --db copy.sqlite3` (aggregate reports in ignored `outputs/`).
 - Build the single-file demo (invented data, one HTML file plus a zip): `python scripts/build_demo_html.py`.
-- Build the UAT zip: `python scripts/build_uat_zip.py --db data/handoff/siemens_uat.sqlite3`.
+- Build the handoff zip: `python scripts/build_uat_zip.py --db data/handoff/siemens_capstone.sqlite3 --handoff`.
 - Tests: `pip install -r requirements-dev.txt`, `python -m playwright install chromium`, `python -m pytest -q` (`-m 'not browser'` for backend only).

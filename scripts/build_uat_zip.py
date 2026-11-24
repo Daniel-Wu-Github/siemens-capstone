@@ -1,7 +1,7 @@
 """Build the UAT hand-off zip: the app, run scripts, one README and the database. No docs, tests or source data.
 
-    python scripts/build_uat_zip.py --db data/handoff/siemens_uat.sqlite3 [--out outputs/siemens-capstone-uat.zip]
-    python scripts/build_uat_zip.py --db data/handoff/siemens_uat.sqlite3 --handoff    # final hand-off: also the guides and the demo
+    python scripts/build_uat_zip.py --db data/handoff/siemens_capstone.sqlite3 [--out outputs/siemens-capstone-uat.zip]
+    python scripts/build_uat_zip.py --db data/handoff/siemens_capstone.sqlite3 --handoff    # final hand-off: also the guides and the demo
 
 The zip contains Siemens data (the database): send it through a private channel, never Git. The output
 folder `outputs/` is Git-ignored.
@@ -20,7 +20,7 @@ FORBIDDEN = ('.claude', '.agents', '.ai-workflow', 'CLAUDE.md', 'CODEX.md', 'AGE
 FOLDER = 'siemens-capstone-uat'
 HANDOFF_FOLDER = 'siemens-capstone-handoff'
 DEMO = ROOT / 'outputs' / 'Siemens_Replenishment_Demo.html'
-DB_NAME = 'siemens_uat.sqlite3'
+DB_NAME = 'siemens_capstone.sqlite3'
 
 
 def members(handoff=False):

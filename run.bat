@@ -1,16 +1,16 @@
 @echo off
 rem Start the prototype: run.bat [database-file] [port]
-rem Defaults: siemens_uat.sqlite3 in this folder, port 8765.
+rem Defaults: siemens_capstone.sqlite3 in this folder, port 8765.
 setlocal
 cd /d "%~dp0"
 set "DB=%~1"
-if "%DB%"=="" set "DB=siemens_uat.sqlite3"
+if "%DB%"=="" set "DB=siemens_capstone.sqlite3"
 set "PORT=%~2"
 if "%PORT%"=="" set "PORT=8765"
 
 if exist "%DB%" goto havedb
 echo Database not found: %DB%
-echo Put siemens_uat.sqlite3 next to run.bat, or pass its path: run.bat path\to\file.sqlite3
+echo Put siemens_capstone.sqlite3 next to run.bat, or pass its path: run.bat path\to\file.sqlite3
 pause
 exit /b 1
 

@@ -1,13 +1,13 @@
 #!/bin/sh
 # Start the prototype: sh run.sh [database-file] [port]
-# Defaults: siemens_uat.sqlite3 in this folder, port 8765.
+# Defaults: siemens_capstone.sqlite3 in this folder, port 8765.
 cd "$(dirname "$0")" || exit 1
-DB="${1:-siemens_uat.sqlite3}"
+DB="${1:-siemens_capstone.sqlite3}"
 PORT="${2:-8765}"
 
 if [ ! -f "$DB" ]; then
   echo "Database not found: $DB"
-  echo "Put siemens_uat.sqlite3 next to run.sh, or pass its path: sh run.sh path/to/file.sqlite3"
+  echo "Put siemens_capstone.sqlite3 next to run.sh, or pass its path: sh run.sh path/to/file.sqlite3"
   exit 1
 fi
 

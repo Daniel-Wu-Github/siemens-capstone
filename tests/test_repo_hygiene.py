@@ -19,7 +19,7 @@ def test_only_the_data_folder_readme_and_keepfile_are_tracked():
 
 
 @pytest.mark.skipif(shutil.which('git') is None or not (ROOT / '.git').exists(), reason='needs a Git checkout')
-@pytest.mark.parametrize('name', ['data/Prod_Capstone_Data.xlsx', 'data/capstone.sqlite3', 'data/handoff/siemens_uat.sqlite3', 'data/anything.csv', 'data/new_folder/x.txt'])
+@pytest.mark.parametrize('name', ['data/Prod_Capstone_Data.xlsx', 'data/capstone.sqlite3', 'data/handoff/siemens_capstone.sqlite3', 'data/anything.csv', 'data/new_folder/x.txt'])
 def test_everything_else_in_data_is_ignored(name):
     assert git('check-ignore', '-q', name).returncode == 0, f'{name} would be committed'
     assert git('check-ignore', '-q', 'data/README.md').returncode == 1
