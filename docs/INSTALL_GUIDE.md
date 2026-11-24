@@ -12,14 +12,39 @@ The app is one Python process that serves one HTML page and keeps its data in on
 | One Python package | `openpyxl`, installed from `requirements.txt` (needs internet access or an internal pip mirror) |
 | A browser | Any current browser. Tested on Chromium. |
 | The code | This repository, or the UAT zip |
-| Siemens data (to see real results) | The manufacturing workbook, a Min/Max file, a BOM file and a bin-status file. None are in the repository. See step 4. |
+| Siemens data (to see real results) | The manufacturing workbook, a Min/Max file and a BOM file. The daily bin-status files are optional. None are in the repository. See step 4. |
 
 Only for running the tests or rebuilding the demo: `requirements-dev.txt` (`pytest`, `playwright`) and `python -m playwright install chromium`.
 
 ## 2. Install and start
 
-**Easiest (Windows):** double-click `run.bat`.
-**Easiest (Mac / Linux):** in a terminal in the project folder, run `sh run.sh`.
+Two ways to start. **Option A is the one to use** if you received the handoff zip. Option B rebuilds the database from the Siemens files (section 4 explains the loading steps).
+
+### Option A (preferred): from the handoff zip
+
+1. Unzip `siemens-capstone-handoff.zip`.
+2. Open a terminal in the unzipped folder.
+3. Run `sh run.sh siemens_capstone.sqlite3` (Windows: `run.bat siemens_capstone.sqlite3`).
+4. Open http://127.0.0.1:8765.
+
+Nothing to import: the zip's database already holds the workbook, the Min/Max file, the BOM and the alert history. The first start creates `.venv` and installs `openpyxl`.
+
+### Option B: rebuild from the Siemens files
+
+Put the workbook, the Min/Max file and the BOM in `data/` (daily bin-status files are optional), then:
+
+```
+python server.py --db data/new.sqlite3 --import-workbook data/Prod_Capstone_Data.xlsx \
+    --attach data/Min_Max-SM.xlsx --attach data/BOMEXAMPLE.xlsx --quiet --no-serve
+python server.py --db data/new.sqlite3
+```
+
+Or load the same files in the browser, as section 4 describes, starting from an empty database.
+
+### Starting the app
+
+**Windows:** double-click `run.bat`, or run `run.bat siemens_capstone.sqlite3` from a terminal.
+**Mac / Linux:** in a terminal in the folder, run `sh run.sh siemens_capstone.sqlite3`.
 
 The script creates a private `.venv` folder, installs `openpyxl` the first time, starts the server and opens your browser at **http://127.0.0.1:8765**. Keep the window open while you use the app. Close it, or press Ctrl+C, to stop.
 
@@ -41,7 +66,7 @@ Then open http://127.0.0.1:8765.
 | `--db my_copy.sqlite3` | Use another database file (default `data/capstone.sqlite3`) |
 | `--check-minutes 15` | Re-check stock alerts every 15 minutes (default off) |
 
-With the scripts the options are positional: `run.sh my_copy.sqlite3 8766`. The scripts expect `siemens_uat.sqlite3` next to them and will not create an empty database.
+With the scripts the options are positional: `run.sh my_copy.sqlite3 8766`. Without a database argument they use `siemens_capstone.sqlite3` next to them. They never create an empty database.
 
 A new database is empty. The first screen asks for data:
 
@@ -70,17 +95,18 @@ Open **Data sources**. Load files in this order.
 2. **Reference files.** Choose each file (XLSX or CSV, up to 32 MB) in the same box, one at a time. The type is detected from its headers.
    - **Min/Max tolerances:** minimum and maximum per bin.
    - **Bill of materials (BOM):** parts per product.
-   - **Bin-status snapshot:** the daily file, named `Bin_Status_YYYY-MM-DD.xlsx`. Enter its date in **Snapshot date** first.
+   - **Daily bin-status files (optional):** `Bin_Status_YYYY-MM-DD.xlsx`. Add them to keep stock current after the workbook was exported. Enter each file's date in **Snapshot date** first.
 3. **Source inventory** (4) lists the loaded sheets with row counts. Check that the numbers look right. The page also shows join coverage and any quality findings.
 
-Stock alerts need all three: the workbook, a Min/Max file and a bin-status snapshot. Until then the Stock alerts page asks you to import them. Importing again refreshes the analysis; the source rows are unchanged.
+Stock alerts need the workbook and a Min/Max file. Stock comes from the workbook's `BIN_STATUS_EXAMPLE` sheet unless a daily bin-status file is added; a daily file then overrides it. The BOM is needed for the schedule part of the forecast. Importing again refreshes the analysis; the source rows are unchanged.
 
 **From the command line** (same result, useful for scripting):
 
 ```
 python server.py --db new.sqlite3 --import-workbook data/Prod_Capstone_Data.xlsx \
     --attach data/Min_Max-SM.xlsx --attach data/BOMEXAMPLE.xlsx \
-    --attach Bin_Status_2026-10-22.xlsx --as-of 2026-10-22 --quiet --no-serve
+    --quiet --no-serve
+# optional daily file: add  --attach Bin_Status_2026-10-22.xlsx --as-of 2026-10-22  to the command
 ```
 
 `--quiet` loads the files without sending notifications. `--no-serve` exits afterwards. Then start normally with `--db new.sqlite3`.
@@ -125,9 +151,9 @@ To start again from nothing, stop the server and delete the database file.
 | "Python was not found" | Install Python 3.11+ (tick "Add to PATH" on Windows) |
 | pip cannot download | Point pip at your internal mirror (`pip config set global.index-url ...`) |
 | "Cannot listen on port 8765" | Another program uses it. Start with `--port 8766` |
-| "Database not found" (scripts) | Put `siemens_uat.sqlite3` next to the script, or pass a path |
+| "Database not found" (scripts) | Put `siemens_capstone.sqlite3` next to the script, or pass a path |
 | Blank page or "unavailable" | The server window must still be open. Reload the page. |
-| "Import a workbook first" | Load the workbook, a Min/Max file and a bin-status file (step 4) |
+| "Import a workbook first" | Load the workbook and a Min/Max file (step 4). The page's text also mentions a bin-status snapshot; that is not required. |
 | Import looks wrong or incomplete | Open **Quality findings** on Data sources: it lists missing sheets or columns. Check the sheet names in step 4 and the file size (32 MB limit). Column details: [Data import guide](DATA_IMPORT_GUIDE.md). A workbook missing a required sheet or column is rejected with a message and nothing is imported. |
 
 ## 8. Run the tests

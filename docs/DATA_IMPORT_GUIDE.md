@@ -8,9 +8,9 @@ Everything here describes the current prototype. Items marked **proposed** are n
 
 ![Current architecture: files in, batch analysis, out](images/arch-today.svg)
 
-- Data arrives as **files**: one manufacturing workbook (XLSX, four sheets) and up to three reference files (Min/Max, BOM, a daily bin-status file). A person exports them from Siemens systems and uploads them.
+- Data arrives as **files**: one manufacturing workbook (XLSX, four sheets) and up to three reference files (Min/Max, BOM, and optional daily bin-status files). A person exports them from Siemens systems and uploads them.
 - The app keeps the original rows in SQLite and works out its numbers on request. Nothing is fetched from Siemens.
-- "Available" stock comes from the **newest dated bin-status file**. A day-old file means day-old stock.
+- "Available" stock comes from the **newest dated bin-status file** if one is loaded. Without any, it comes from the workbook's `BIN_STATUS_EXAMPLE` sheet, which has no export date.
 - Demand comes from the **replenishment transfers** in the workbook (history) and the **planned production** plus BOM (schedule).
 
 ## 2. What to load
@@ -20,9 +20,9 @@ Everything here describes the current prototype. Items marked **proposed** are n
 | 1 | Manufacturing workbook | XLSX, up to 32 MB | see the sheet table below | History rate, schedule rate, last replenished, refill flags |
 | 2 | Min/Max tolerances | XLSX or CSV | `Part`, `Location`, `Min`, `Max` (`Type` optional) | The minimum and maximum of each bin |
 | 3 | Bill of materials | XLSX or CSV | `Item`, `Part`, `Qty` | Turns planned production into per-part demand |
-| 4 | Daily bin status | XLSX or CSV, named `Bin_Status_YYYY-MM-DD` | `Part`, `Location`, `Min`, `Max`, `Live Value` | Current stock ("available") |
+| 4 | Daily bin status (optional) | XLSX or CSV, named `Bin_Status_YYYY-MM-DD` | `Part`, `Location`, `Min`, `Max`, `Live Value` | Newer stock ("available") than the workbook sheet |
 
-Stock alerts need 1, 2 and a stock reading (4, or the `BIN_STATUS_EXAMPLE` sheet inside the workbook). The BOM adds the schedule rate; without it the forecast uses history only.
+Stock alerts need 1 and 2. Stock comes from the `BIN_STATUS_EXAMPLE` sheet in 1, or from 4 when it is loaded. The BOM adds the schedule rate; without it the forecast uses history only.
 
 **The workbook** must contain these four sheets. A workbook missing a sheet or a required column is rejected with the message "This is not the manufacturing workbook … Nothing was imported."
 
@@ -39,7 +39,7 @@ Stock alerts need 1, 2 and a stock reading (4, or the `BIN_STATUS_EXAMPLE` sheet
 
 1. Open **Data sources**.
 2. Under **Import a manufacturing workbook**, choose the workbook.
-3. Under **Reference files**, choose the Min/Max file, then the BOM, then each daily bin-status file. Enter the **Snapshot date** for a daily file.
+3. Under **Reference files**, choose the Min/Max file, then the BOM. Optionally choose daily bin-status files, entering each one's **Snapshot date**.
 4. Check **Source inventory** (row counts per sheet), **Quality findings** and **Join coverage**.
 
 ![Data sources page](images/data-sources.png)
