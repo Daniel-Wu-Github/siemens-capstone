@@ -22,7 +22,7 @@ def demo(tmp_path_factory):
     tmp = tmp_path_factory.mktemp('demo')
     data, store, ds = export_data.export(tmp)
     out = tmp / 'demo.html'
-    build_demo_html.build(out, {'stock': 'data:image/png;base64,AAAA'}, data)
+    build_demo_html.build(out, data)
     return dict(html=out, url=out.as_uri(), data=data, store=store, ds=ds, text=out.read_text())
 
 
@@ -53,7 +53,8 @@ def call(page, path, body=None):
 # ---------------------------------------------------------------- build
 def test_build_is_one_self_contained_file_and_leaves_the_real_app_alone(demo):
     text = demo['text']
-    assert 'PRACTICE COPY' in text and 'Testing guide' in text and 'window.fetch = async' in text
+    assert 'PRACTICE COPY' in text and 'window.fetch = async' in text
+    assert 'Testing guide' not in text and 'guidePageHtml' not in text
     assert re.search(r'(src|href)="https?://', text) is None and '@import' not in text      # nothing is loaded from the network
     assert 'PRACTICE COPY' not in (ROOT / 'index.html').read_text()
     assert 'DEMO-1001' in text
@@ -188,39 +189,30 @@ def rows(page, tbody):
 
 
 @pytest.mark.browser
-def test_opens_on_the_guide_with_screenshots_and_every_task(demo):
+def test_opens_on_stock_alerts_with_no_built_in_guide(demo):
     with sync_playwright() as p:
         s = Page(p, demo['url']); page = s.page
-        expect(page.get_by_role('heading', name='Testing guide', exact=True)).to_be_visible()
-        expect(page).to_have_url(re.compile(r'demo\.html$'))
+        expect(page.get_by_role('heading', name='Stock alerts', exact=True)).to_be_visible()
         expect(page.locator('.demo-ribbon')).to_contain_text('nothing is saved or sent')
-        assert page.evaluate("[...document.querySelectorAll('#nav a')].map(a => a.firstChild.textContent)") == ['Stock alerts', 'Predicted alerts', 'Replenishment insights', 'Data sources', 'Settings', 'Testing guide']
-        expect(page.locator('#nav a[aria-current="page"]')).to_have_text('Testing guide')
-        assert page.locator('.guide-task').count() == 8
-        for n in range(1, 9):
-            expect(page.locator(f'#task-{n} h2')).to_be_visible()
-            for label in ('Goal:', 'You should see:', 'Tell us if:'):
-                expect(page.locator(f'#task-{n}')).to_contain_text(label)
-        expect(page.locator('figure.shot img')).to_have_count(1)        # the test build embeds one placeholder image
-        f = demo['data']['stock']['positions']
-        expect(page.locator('#task-2')).to_contain_text('DEMO-')
-        page.locator('.guide-toc [data-task="5"]').click()
-        expect(page.locator('#task-5 h2')).to_be_in_viewport()
+        assert page.locator('.demo-ribbon a').count() == 0
+        assert page.evaluate("[...document.querySelectorAll('#nav a')].map(a => a.firstChild.textContent)") == ['Stock alerts', 'Predicted alerts', 'Replenishment insights', 'Data sources', 'Settings']
+        expect(page.locator('#nav a[aria-current="page"]')).to_contain_text('Stock alerts')
         for target in ('stock', 'predicted', 'insights', 'data', 'settings'):
             page.goto(f'{demo["url"]}#{target}'); expect(page.locator('#main h1')).to_be_visible()
-        page.goto(demo['url'] + '#guide')
-        page.locator('[data-demo-reset]').click()
-        expect(page.locator('#toast')).to_have_text('Demo data reset.')
+        page.goto(demo['url'] + '#guide')                      # an unknown page falls back to Stock alerts
+        expect(page.get_by_role('heading', name='Stock alerts', exact=True)).to_be_visible()
         s.close()
 
 
 @pytest.mark.browser
-def test_guide_screenshots_are_in_the_real_build_and_steps_use_real_values():
-    out = ROOT / 'outputs' / 'Siemens_Replenishment_Demo.html'
-    if not out.exists(): pytest.skip('run scripts/build_demo_html.py first')
-    text = out.read_text()
-    for name in ('stock', 'stock-edit', 'predicted', 'norate', 'insights', 'settings'):
-        assert re.search(rf'"{name}": "data:image/png;base64,[A-Za-z0-9+/=]{{1000,}}"', text), name
+def test_feedback_button_is_on_screen_in_the_demo(demo):
+    with sync_playwright() as p:
+        s = Page(p, demo['url'], {'width': 1280, 'height': 700}); page = s.page
+        box = page.locator('#open-feedback').bounding_box()
+        assert box and box['y'] >= 0 and box['y'] + box['height'] <= 700, box
+        page.locator('#open-feedback').click()
+        expect(page.locator('#feedback-overlay')).to_be_visible()
+        s.close()
 
 
 @pytest.mark.browser
@@ -351,7 +343,7 @@ def test_predicted_insights_settings_and_data_in_the_demo(demo, tmp_path):
 def test_demo_pages_fit_at_desktop_widths(demo, width, height):
     with sync_playwright() as p:
         s = Page(p, demo['url'], {'width': width, 'height': height}); page = s.page
-        for name in ('guide', 'stock', 'predicted', 'insights', 'data', 'settings'):
+        for name in ('stock', 'predicted', 'insights', 'data', 'settings'):
             page.goto(f'{demo["url"]}#{name}'); expect(page.locator('#main h1')).to_be_visible(); page.wait_for_timeout(300)
             assert page.evaluate('document.documentElement.scrollWidth <= innerWidth'), name
             assert page.evaluate("[...document.querySelectorAll('.tw')].filter(t => t.scrollWidth > t.clientWidth + 1).length") == 0, name

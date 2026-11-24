@@ -132,3 +132,26 @@ def test_digest_enlarge_opens_a_grouped_dialog_that_closes_with_escape(tmp_path,
         expect(dialog).not_to_be_visible()
         assert not errors
         browser.close()
+
+
+@pytest.mark.browser
+def test_feedback_button_is_always_on_screen_and_saves(tmp_path, clean_env):
+    """Regression: the sidebar was page-tall, so the button sat at the bottom of a long page and was never seen."""
+    with running_server(tmp_path) as base, sync_playwright() as p:
+        browser, page, errors = open_stock(p, base, tmp_path)
+        page.set_viewport_size({'width': 1440, 'height': 420})
+        page.evaluate("document.querySelector('main').insertAdjacentHTML('beforeend', '<div style=\"height:4000px\"></div>')")
+        button = page.locator('#open-feedback')
+        for scroll in (0, 3000):
+            page.evaluate(f'window.scrollTo(0, {scroll})')
+            box = button.bounding_box()
+            assert box and 0 <= box['y'] and box['y'] + box['height'] <= 420, f'button off screen at scroll {scroll}: {box}'
+        button.click()
+        page.fill('#fb-name', 'Tester')
+        page.fill('#fb-message', 'Sorting by Open since is useful.')
+        page.click('#fb-submit')
+        expect(page.locator('#fb-status')).not_to_have_text('')
+        saved = page.request.get(base + '/api/feedback').json()
+        assert any(f['message'] == 'Sorting by Open since is useful.' and f['name'] == 'Tester' for f in saved)
+        assert not errors
+        browser.close()

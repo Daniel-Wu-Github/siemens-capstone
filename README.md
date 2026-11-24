@@ -2,6 +2,21 @@
 
 Texas A&M CSCE 482 capstone for Siemens Digitalization and Data. The prototype warns warehouse staff before supermarket bins run out: it flags bins already below minimum, predicts which bins will get there soon, and shows which parts have replenishment problems. It runs on one computer, in a browser, from one database file.
 
+## Which document do I read first?
+
+| I want to… | Read this | Time |
+| --- | --- | --- |
+| Understand what this is and see it without any setup | This README, then open the demo (`python scripts/build_demo_html.py`, see below) | 5 min |
+| Use the screens | [User guide](docs/USER_GUIDE.md) | 10 min |
+| Install and start it | [Install guide](docs/INSTALL_GUIDE.md) | 10 min |
+| Load Siemens files or see which columns are needed | [Data import guide](docs/DATA_IMPORT_GUIDE.md) | 15 min |
+| Connect a live data source | [Live data integration](docs/LIVE_DATA_INTEGRATION.md), after the Data import guide | 15 min |
+| Turn on email, Teams or webhook alerts | [Notification guide](docs/NOTIFICATION_GUIDE.md) (Teams steps: [teams-setup.md](docs/teams-setup.md), draft) | 10 min |
+| Check how the numbers are calculated | [formulas.md](docs/formulas.md) (locked), then [data-inventory.md](docs/data-inventory.md) | 10 min |
+| Continue development | Repository layout below, then [architecture.md](docs/architecture.md), [alerts.md](docs/alerts.md) (API), [frontend_design_system.md](docs/frontend_design_system.md), then the tests | 1 hour |
+
+Not sure where to start? Read **What this project does**, then **Known limitations**, then the User guide.
+
 ## What this project does
 
 Warehouse supermarket bins hold small parts for production lines. When a bin runs below its minimum, the line can stall. This prototype reads Siemens exports (bin status, Min/Max, bill of materials, replenishment transfers, planned production) and shows three things:
@@ -88,7 +103,7 @@ If a script cannot be used, run it by hand after `python -m venv .venv` and `pip
 **Five-minute tour** (left menu)
 
 1. **Stock alerts:** every bin with its stock, minimum and maximum. Click a column heading to sort, use the search box and filter. Type a lower number in *Available* and press Enter (or *Set*) to simulate a breach: an alert opens and an email is saved as a file in `outputs/outbox` (nothing is emailed). *Reset* on a row, or *Reset simulated stock*, puts it back. *Acknowledge all below-minimum* marks the open below-minimum alerts as seen without changing stock. Alert rows carry a red marker on the left, and the menu shows a red count of open below-minimum alerts you have not acknowledged. **Open since** shows how long each alert has been open (longest first by default; click the heading to cycle) and **Last replenished** shows the date of the most recent recorded refill. Open since is when this tool detected the breach, not when stock actually fell. **Enlarge** on *Last notification* opens the stock alert digest in a larger window (Esc closes it).
-2. **Predicted alerts:** bins forecast to reach their minimum within lead time + safety buffer (Predicted), and within 72 hours (Watch). Click a row to see how it was calculated and a chart counting down to the minimum (hollow dot) and to empty (solid dot); the teal dot is now. Positions with no demand history show why they have no rate.
+2. **Predicted alerts:** bins forecast to reach their minimum within lead time + safety buffer (Predicted), and within 72 hours (Watch). Click a row to see how it was calculated and a chart counting down to the minimum (hollow dot) and to empty (solid dot); the teal dot is now. The 30 d / 45 d / 60 d buttons preview a different history window. Positions with no demand history show why they have no rate.
 3. **Replenishment insights:** parts with replenishment problems. Click the flag buttons (short refills, frequent refills, divergent) to filter; change the thresholds live; export CSV.
 4. **Data sources:** import the Siemens workbook and reference files (Min/Max, BOM, daily bin status named `Bin_Status_YYYY-MM-DD.xlsx`). Already loaded in the supplied database.
 5. **Settings:** lead times, safety buffer, watch window and the **history share** slider (schedule gets the rest). The formulas and the tier counters update live before you save. Presets can be saved and applied.
@@ -100,6 +115,7 @@ If a script cannot be used, run it by hand after `python -m venv .venv` and `pip
 - **Alert:** available ≤ min. **Predicted:** hours ≤ lead time + safety buffer (3 h + 24 h by default). **Watch:** hours ≤ 72 (dashboard only).
 - Suggested quantity = ceil(max − (available − demand × lead / 24)).
 - Positions without history or schedule are shown as "No rate" and are not forecast.
+- **History window (30 / 45 / 60 days):** the history rate is the transfer quantity in the last N days divided by N. The default is 30. Use the 30 d / 45 d / 60 d buttons on Predicted alerts and Replenishment insights to compare; clicking only previews, and **Save window and send emails** (Predicted alerts) stores the choice. The start-up default can be set with `RATE_WINDOW_DAYS` (30, 45 or 60). On the held-out backtest the longer windows had lower demand-rate error (mean absolute error 4.02, 3.41 and 3.15 units/day for 30, 45 and 60 days), but that tests the daily rate only, not stockout timing, and the default stays 30 until the sponsor confirms.
 
 ## Know before you test
 
@@ -127,6 +143,6 @@ Set environment variables before starting (they are read at start-up): `SMTP_HOS
 - The repository is public: never commit Siemens workbooks, database files, row-level examples or credentials. Keep them in the ignored `data/` folder.
 - Build a workspace from source files: `python server.py --db new.sqlite3 --import-workbook data/Prod_Capstone_Data.xlsx --attach data/Min_Max-SM.xlsx --attach data/BOMEXAMPLE.xlsx --attach Bin_Status_2026-10-22.xlsx --quiet --no-serve`.
 - Offline demand-rate backtest: `python scripts/backtest_rates.py --db copy.sqlite3` (aggregate reports in ignored `outputs/`).
-- Build the single-file demo (invented data, one HTML file plus a zip, with a testing guide): `python scripts/build_demo_html.py`.
+- Build the single-file demo (invented data, one HTML file plus a zip): `python scripts/build_demo_html.py`.
 - Build the UAT zip: `python scripts/build_uat_zip.py --db data/handoff/siemens_uat.sqlite3`.
 - Tests: `pip install -r requirements-dev.txt`, `python -m playwright install chromium`, `python -m pytest -q` (`-m 'not browser'` for backend only).

@@ -2,7 +2,9 @@
 handoff.md
 
 # Siemens data, exports, credentials, and generated artifacts.
-data/
+data/*
+!data/README.md
+!data/.gitkeep
 *.csv
 *.tsv
 *.xlsx
@@ -45,3 +47,4 @@ build/
 .DS_Store
 .idea/
 .vscode/
+scripts/build_integration_diagrams.py

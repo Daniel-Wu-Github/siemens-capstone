@@ -169,7 +169,7 @@ def test_invalid_settings_show_an_inline_error_and_change_nothing(tmp_path, clea
 def test_run_check_button_posts_and_reloads(tmp_path, clean_env):
     with running_server(tmp_path) as base, sync_playwright() as p:
         browser, page, ds, errors = open_page(p, base, 'predicted')
-        page.get_by_role('link', name='Stock alerts').click()
+        page.locator('aside a', has_text='Stock alerts').click()
         with page.expect_response('**/api/stock/check') as info:
             page.get_by_role('button', name='Run check').click()
         assert info.value.status == 200 and info.value.json()['checked_at']
@@ -199,11 +199,11 @@ def test_predicted_chart_is_full_width(tmp_path, clean_env):
     """B12: The projection chart renders at full width above the table."""
     with running_server(tmp_path) as base, sync_playwright() as p:
         browser, page, ds, errors = open_page(p, base, 'predicted')
+        page.locator('#pred-rows tr[data-pred]', has_text='Predicted').first.click()
         page.wait_for_selector('#pred-chart svg')
         svg = page.query_selector('#pred-chart svg')
         viewbox = svg.get_attribute('viewBox')
         assert viewbox.startswith('0 0 760'), f'Expected labelled chart, got viewBox={viewbox}'
-        page.locator('#pred-rows tr[data-pred]', has_text='Predicted').first.click()
         chart = page.locator('#pred-chart svg')
         expect(chart.locator('text', has_text='Hits minimum in')).to_have_count(0)
         expect(chart.locator('text', has_text='Empty in')).to_have_count(0)
@@ -276,5 +276,38 @@ def test_rate_window_toggle_updates_setting_and_reloads(tmp_path, clean_env):
         saved_after = page.request.get(base + f'/api/stock?dataset={ds}').json()
         assert saved_after['forecast']['settings']['rate_window_days'] == 60
 
+        assert not errors
+        browser.close()
+
+
+@pytest.mark.browser
+def test_alert_tier_hides_chart_and_links_to_stock_alerts(tmp_path, clean_env):
+    """Nov 18 sponsor feedback: no forecast chart for a bin already at or below minimum."""
+    with running_server(tmp_path) as base, sync_playwright() as p:
+        browser, page, ds, errors = open_page(p, base, 'predicted')
+        page.locator('#pred-rows tr[data-pred]', has_text='Alert').first.click()
+        expect(page.locator('#pred-chart svg')).to_have_count(0)
+        expect(page.locator('#pred-chart .alert-act')).to_contain_text('Already at or below the minimum')
+        expect(page.locator('#pred-chart .pred-info')).to_have_count(1)
+        page.locator('#go-stock').click()
+        expect(page.get_by_role('heading', name='Stock alerts').first).to_be_visible()
+        assert page.evaluate('location.hash') == '#stock'
+        page.goto(page.url.split('#')[0] + '#predicted')
+        page.locator('#pred-rows tr[data-pred]', has_text='Predicted').first.click()
+        expect(page.locator('#pred-chart svg')).to_have_count(1)
+        assert not errors
+        browser.close()
+
+
+@pytest.mark.browser
+def test_hours_to_minimum_column_is_emphasised(tmp_path, clean_env):
+    """Nov 18 sponsor feedback: the hours-to-minimum number is the thing to read first."""
+    with running_server(tmp_path) as base, sync_playwright() as p:
+        browser, page, ds, errors = open_page(p, base, 'predicted')
+        num = page.locator('#pred-rows td.hrs .num').first
+        assert page.evaluate("el => getComputedStyle(el).fontWeight", num.element_handle()) in ('700', 'bold')
+        other = page.locator('#pred-rows td:nth-child(3)').first
+        size = lambda el: float(page.evaluate("e => getComputedStyle(e).fontSize", el.element_handle())[:-2])
+        assert size(num) > size(other)
         assert not errors
         browser.close()

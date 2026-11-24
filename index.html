@@ -18,7 +18,7 @@ body{margin:0;background:var(--bg);color:var(--ink);font:var(--t-md)/var(--lh-bo
 table,.num{font-variant-numeric:tabular-nums}
 :focus-visible{outline:none;box-shadow:var(--focus)}
 .shell{display:grid;grid-template-columns:208px minmax(0,1fr);min-height:100vh}
-aside{background:var(--surface);border-right:1px solid var(--line);padding:var(--s5) var(--s3);display:flex;flex-direction:column;gap:var(--s1)}
+aside{background:var(--surface);border-right:1px solid var(--line);padding:var(--s5) var(--s3);display:flex;flex-direction:column;gap:var(--s1);position:sticky;top:0;align-self:start;height:100vh;overflow-y:auto}
 .brand{font-weight:700;font-size:var(--t-lg);padding:0 var(--s2) var(--s4)}
 .brand small{display:block;font-weight:400;font-size:var(--t-xs);color:var(--muted)}
 aside a{display:block;padding:var(--s2);color:var(--ink-2);text-decoration:none;border-left:3px solid transparent;font-size:var(--t-md)}
@@ -98,6 +98,8 @@ table.parts th{white-space:normal;vertical-align:bottom}
 table.w2.stock td:nth-child(-n+2),table.w2.pred td:nth-child(-n+2){min-width:120px}
 table.pred th{white-space:normal;vertical-align:bottom}
 table.pred .hb{width:84px}
+table.pred th.hrs{color:var(--ink);font-weight:700}table.pred td.hrs .num{font-size:var(--t-lg);font-weight:700;color:var(--ink)}
+.alert-act{padding:var(--s5) var(--s4);display:grid;gap:var(--s2);justify-items:start}.alert-act b{font-size:var(--t-lg);color:var(--alert)}.alert-act p{margin:0;color:var(--ink-2)}.alert-act .btn{text-decoration:none;display:inline-flex;align-items:center}
 table.sources td:last-child{white-space:normal}
 table.pred th,table.pred td,table.stock th,table.stock td{padding-left:var(--s2);padding-right:var(--s2)}
 table.w2.stock td:first-child{max-width:170px}
@@ -569,7 +571,9 @@ function predPageHtml() {
         <section class="panel pred-chart-card" id="pred-chart">
           <h2><span>${esc(sel.description || sel.material)}</span> <small class="why" style="font-weight:400">${esc(sel.material)} · ${esc(sel.supermarket)} · ${esc(sel.storage_type)} / ${esc(sel.bin)}</small></h2>
           <div class="body pred-chart">
-            ${sel.hours_to_min != null && sel.demand_per_day
+            ${tierOf(sel)[0] === 'alert'
+              ? `<div class="alert-act"><b>Already at or below the minimum.</b><p>A forecast adds nothing here. Replenish this bin now.</p><a class="btn primary" href="#stock" id="go-stock">Go to Stock alerts</a></div>`
+              : sel.hours_to_min != null && sel.demand_per_day
               ? projection(sel, sel.lead_hours + fs.safety_hours, fs.watch_hours)
               : `<div class="note" style="padding:var(--s4)">No projection: ${esc(sel.description || sel.material)} has no demand rate or is already at its minimum.</div>`}
             <div class="pred-info">
@@ -594,9 +598,9 @@ function predPageHtml() {
     `<div style="display:flex;justify-content:flex-end;margin-bottom:var(--s2)">${windowToggle(rateWindow)}</div>` + noRateReasonsHtml(d) +
     chartHtml +
     `<section class="panel"><div class="tools prominent"><input id="pred-search" placeholder="Search material, description, supermarket or bin" value="${esc(predSearch)}" aria-label="Search predicted alerts"><select id="pred-filter" aria-label="Predicted alert filter"><option value="act">Predicted, Watch and below minimum</option><option value="rate">All with a demand rate</option><option value="norate">No demand rate</option><option value="all">All positions</option></select></div>
-<div class="tw"><table class="w2 pred"><thead><tr><th>Material<th>Location<th class="r">Available<th class="r">Min<th class="r">Demand / day<th>Hours to minimum<th>Tier</tr></thead><tbody id="pred-rows">${shown.map(p => {
+<div class="tw"><table class="w2 pred"><thead><tr><th>Material<th>Location<th class="r">Available<th class="r">Min<th class="r">Demand / day<th class="hrs">Hours to minimum<th>Tier</tr></thead><tbody id="pred-rows">${shown.map(p => {
       const [tc, tt] = tierOf(p), tick = p.lead_hours + fs.safety_hours;
-      return `<tr data-pred="${esc(p.key)}" class="${p.key === selected ? 'sel' : ''}" tabindex="0"><td>${esc(p.description || p.material)}<small>${esc(p.material)}</small></td><td>${esc(p.supermarket)}<small>${esc(p.storage_type)} / ${esc(p.bin)}</small></td><td class="r">${fmt(p.available)}</td><td class="r">${fmt(p.min)}</td><td class="r">${p.demand_per_day == null ? '—' : fmt(p.demand_per_day, 2)}</td><td>${p.hours_to_min == null ? '—' : hoursBar(p.hours_to_min, tick, fs.watch_hours) + `<span class="num">${fmtHours(p.hours_to_min)}</span>`}</td><td>${tag(tc, tt)}${p.no_rate_reason ? `<small class="why">${esc(NO_RATE_SHORT[p.no_rate_reason] || '')}</small>` : ''}</td></tr>`;
+      return `<tr data-pred="${esc(p.key)}" class="${p.key === selected ? 'sel' : ''}" tabindex="0"><td>${esc(p.description || p.material)}<small>${esc(p.material)}</small></td><td>${esc(p.supermarket)}<small>${esc(p.storage_type)} / ${esc(p.bin)}</small></td><td class="r">${fmt(p.available)}</td><td class="r">${fmt(p.min)}</td><td class="r">${p.demand_per_day == null ? '—' : fmt(p.demand_per_day, 2)}</td><td class="hrs">${p.hours_to_min == null ? '—' : hoursBar(p.hours_to_min, tick, fs.watch_hours) + `<span class="num">${fmtHours(p.hours_to_min)}</span>`}</td><td>${tag(tc, tt)}${p.no_rate_reason ? `<small class="why">${esc(NO_RATE_SHORT[p.no_rate_reason] || '')}</small>` : ''}</td></tr>`;
     }).join('') || '<tr><td colspan="7" class="empty">No positions match.</td></tr>'}</tbody></table></div>
 <div class="foot"><span>${fmt(rows.length)} matching positions · page ${predPage + 1} of ${pages}. Bar: 0 to ${fmt(fs.watch_hours)} h, black tick: lead + safety.</span><span><button class="btn small" id="pred-prev"${predPage === 0 ? ' disabled' : ''}>Previous</button> <button class="btn small" id="pred-next"${predPage >= pages - 1 ? ' disabled' : ''}>Next</button></span></div></section>`;
 }
